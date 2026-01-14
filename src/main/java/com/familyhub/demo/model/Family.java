@@ -18,7 +18,7 @@ public class Family {
 
     private String name;
     private String username;
-    private String password_hash;
+    private String passwordHash;
     private LocalDateTime createdAt;
 
 }
