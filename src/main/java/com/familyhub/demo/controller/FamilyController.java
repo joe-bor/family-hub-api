@@ -35,7 +35,7 @@ public class FamilyController {
     @PostMapping("/family")
     ResponseEntity<Family> createFamily(@RequestBody Family tobeCreated) {
         Family family = familyService.createFamily(tobeCreated);
-        URI location = URI.create("/api/family" + family.getId());
+        URI location = URI.create("/api/family/" + family.getId());
         return ResponseEntity.created(location).body(family);
     }
 
