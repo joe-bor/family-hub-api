@@ -1,5 +1,6 @@
 package com.familyhub.demo.service;
 
+import com.familyhub.demo.exception.FamilyNotFoundException;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.repository.FamilyRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +20,7 @@ public class FamilyService {
 
     public Family findFamilyById(UUID familyId) {
          return familyRepository.findById(familyId)
-                 .orElseThrow(() -> new RuntimeException(familyId + " does not exist"));
+                 .orElseThrow(() -> new FamilyNotFoundException(familyId));
     }
 
     public Family createFamily(Family family) {
