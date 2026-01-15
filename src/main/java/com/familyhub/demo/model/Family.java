@@ -1,5 +1,6 @@
 package com.familyhub.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -20,6 +21,8 @@ public class Family {
 
     private String name;
     private String username;
+
+    @JsonIgnore
     private String passwordHash;
 
     @CreationTimestamp
