@@ -24,6 +24,9 @@ public class FamilyService {
     }
 
     public Family createFamily(Family family) {
+        if (familyRepository.existsByUsername(family.getUsername())) {
+            throw new RuntimeException("Username " + family.getUsername() + " already exists");
+        }
         return familyRepository.save(family);
     }
 
