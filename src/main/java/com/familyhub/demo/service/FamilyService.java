@@ -18,6 +18,10 @@ public class FamilyService {
         return familyRepository.findAll();
     }
 
+    public Family findByUsername(String username) {
+        return familyRepository.findByUsername(username);
+    }
+
     public Family findFamilyById(UUID familyId) {
          return familyRepository.findById(familyId)
                  .orElseThrow(() -> new FamilyNotFoundException(familyId));

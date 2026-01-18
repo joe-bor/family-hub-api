@@ -7,4 +7,5 @@ import java.util.UUID;
 
 public interface FamilyRepository extends JpaRepository<Family, UUID> {
     boolean existsByUsername(String username);
+    Family findByUsername(String username);
 }
