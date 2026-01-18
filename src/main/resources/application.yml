@@ -13,3 +13,8 @@ spring:
   sql:
     init:
       mode: never
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 86400000
+  issuer: family-hub-api
