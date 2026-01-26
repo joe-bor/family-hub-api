@@ -3,13 +3,11 @@ package com.familyhub.demo.service;
 import com.familyhub.demo.dto.AuthResponse;
 import com.familyhub.demo.dto.LoginRequest;
 import com.familyhub.demo.dto.RegisterRequest;
-import com.familyhub.demo.exception.FamilyNotFoundException;
 import com.familyhub.demo.exception.InvalidCredentialException;
 import com.familyhub.demo.exception.UsernameAlreadyExists;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.repository.FamilyRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
