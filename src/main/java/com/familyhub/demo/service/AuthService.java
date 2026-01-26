@@ -4,6 +4,7 @@ import com.familyhub.demo.dto.AuthResponse;
 import com.familyhub.demo.dto.LoginRequest;
 import com.familyhub.demo.dto.RegisterRequest;
 import com.familyhub.demo.exception.FamilyNotFoundException;
+import com.familyhub.demo.exception.InvalidCredentialException;
 import com.familyhub.demo.exception.UsernameAlreadyExists;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.repository.FamilyRepository;
@@ -40,12 +41,10 @@ public class AuthService {
 
     public AuthResponse login(LoginRequest loginRequest) {
         Family family = familyRepository.findByUsername(loginRequest.username())
-                .orElseThrow(() -> new FamilyNotFoundException(loginRequest.username()));
+                .orElse(null);
 
-        String encodedPasswordRequest = passwordEncoder.encode(loginRequest.password());
-        // If the hash of provided password does not match the stored password; then request is unauthorized
-        if (!encodedPasswordRequest.equals(family.getPassword())) {
-            throw new BadCredentialsException("Unauthorized");
+        if (family == null || !passwordEncoder.matches(loginRequest.password(), family.getPassword())) {
+            throw new InvalidCredentialException("Invalid username or password.");
         }
 
         String token = jwtService.generateToken(family);
