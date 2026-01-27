@@ -1,6 +1,7 @@
 package com.familyhub.demo.service;
 
 import com.familyhub.demo.dto.AuthResponse;
+import com.familyhub.demo.dto.FamilyResponseDto;
 import com.familyhub.demo.dto.LoginRequest;
 import com.familyhub.demo.dto.RegisterRequest;
 import com.familyhub.demo.exception.InvalidCredentialException;
@@ -34,7 +35,7 @@ public class AuthService {
         // Create JWT and return response
         String token = jwtService.generateToken(saved);
 
-        return new AuthResponse(token, saved);
+        return new AuthResponse(token, FamilyResponseDto.toDto(saved));
     }
 
     public AuthResponse login(LoginRequest loginRequest) {
@@ -46,6 +47,6 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(family);
-        return new AuthResponse(token, family);
+        return new AuthResponse(token, FamilyResponseDto.toDto(family));
     }
 }
