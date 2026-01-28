@@ -8,6 +8,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,6 +20,7 @@ import java.io.IOException;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     public static final String JWT_ERROR_ATTRIBUTE = "jwt-error";
     private static final String AUTHORIZATION_HEADER = "Authorization";
@@ -48,7 +50,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(auth);
             } catch (JwtException e) {
                 // Store error in request object
+                log.debug("JWT validation failed: {}", e.getMessage());
                 request.setAttribute(JWT_ERROR_ATTRIBUTE, e);
+            } catch (Exception e) {
+                log.warn("Unexpected error during authentication", e);
             }
         }
         filterChain.doFilter(request, response);
