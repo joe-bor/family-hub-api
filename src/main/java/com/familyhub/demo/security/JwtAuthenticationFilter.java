@@ -20,7 +20,7 @@ import java.io.IOException;
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-    private static final String JWT_ERROR_ATTRIBUTE = "jwt-error";
+    public static final String JWT_ERROR_ATTRIBUTE = "jwt-error";
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
     private final JwtService jwtService;
@@ -49,7 +49,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             } catch (JwtException e) {
                 // Store error in request object
                 request.setAttribute(JWT_ERROR_ATTRIBUTE, e);
-                // TODO: create AuthenticationEntryPoint & use it in SecurityConfig to handle this error
             }
         }
         filterChain.doFilter(request, response);
