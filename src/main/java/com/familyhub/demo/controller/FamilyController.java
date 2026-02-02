@@ -1,15 +1,15 @@
 package com.familyhub.demo.controller;
 
+import com.familyhub.demo.dto.FamilyResponseDto;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.service.FamilyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -19,33 +19,19 @@ public class FamilyController {
     private final FamilyService familyService;
 
     @GetMapping("/family")
-    ResponseEntity<List<Family>> findAllFamilies() {
-        List<Family> allFamilies = familyService.findAllFamilies();
-
-        return allFamilies.isEmpty()
-                ? ResponseEntity.noContent().build()
-                : ResponseEntity.status(HttpStatus.OK).body(allFamilies);
+    ResponseEntity<FamilyResponseDto> findFamilyById(@AuthenticationPrincipal Family family) {
+        Family familyById = familyService.findFamilyById(family.getId());
+        return ResponseEntity.ok(FamilyResponseDto.toDto(familyById));
     }
 
-    @GetMapping("/family/{id}")
-    ResponseEntity<Family> findFamilyById(@PathVariable UUID id) {
-        Family familyById = familyService.findFamilyById(id);
-        return ResponseEntity.ok(familyById);
-    }
-
-    @PostMapping("/family")
-    ResponseEntity<Family> createFamily(@RequestBody @Valid Family tobeCreated) {
-        Family family = familyService.createFamily(tobeCreated);
-        URI location = URI.create("/api/family/" + family.getId());
-        return ResponseEntity.created(location).body(family);
-    }
-
+    @PreAuthorize("#id == authentication.principal.id")
     @PutMapping("/family/{id}")
-    ResponseEntity<Family> updateFamily(@PathVariable UUID id, @RequestBody @Valid Family family) {
+    ResponseEntity<FamilyResponseDto> updateFamily(@PathVariable UUID id, @RequestBody @Valid Family family) {
         Family updatedFamily = familyService.updateFamily(id, family);
-        return ResponseEntity.ok(updatedFamily);
+        return ResponseEntity.ok(FamilyResponseDto.toDto(updatedFamily));
     }
 
+    @PreAuthorize("#id == authentication.principal.id")
     @DeleteMapping("/family/{id}")
     ResponseEntity<Void> deleteFamily(@PathVariable UUID id) {
         familyService.deleteFamily(id);
