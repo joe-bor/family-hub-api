@@ -1,12 +1,12 @@
 package com.familyhub.demo.service;
 
 import com.familyhub.demo.config.JwtConfig;
+import com.familyhub.demo.model.Family;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -20,9 +20,9 @@ public class JwtService {
     private final JwtConfig jwtConfig;
 
 
-    public String generateToken(UserDetails userDetails) {
+    public String generateToken(Family family) {
         return Jwts.builder()
-                .subject(userDetails.getUsername())
+                .subject(family.getId().toString())
                 .issuer(jwtConfig.getIssuer())
                 .signWith(getSignInKey())
                 .issuedAt(new Date(System.currentTimeMillis()))
@@ -30,14 +30,7 @@ public class JwtService {
                 .compact();
     }
 
-    public void validateToken(String token, UserDetails userDetails) {
-        String username = extractUsername(token);
-         if(!userDetails.getUsername().equals(username)) {
-             throw new RuntimeException("JWT subject mismatch");
-         }
-    }
-
-    public String extractUsername(String token) {
+    public String extractSubject(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
