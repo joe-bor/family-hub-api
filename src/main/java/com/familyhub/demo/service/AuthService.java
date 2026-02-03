@@ -1,9 +1,6 @@
 package com.familyhub.demo.service;
 
-import com.familyhub.demo.dto.AuthResponse;
-import com.familyhub.demo.dto.FamilyResponseDto;
-import com.familyhub.demo.dto.LoginRequest;
-import com.familyhub.demo.dto.RegisterRequest;
+import com.familyhub.demo.dto.*;
 import com.familyhub.demo.exception.InvalidCredentialException;
 import com.familyhub.demo.exception.UsernameAlreadyExists;
 import com.familyhub.demo.model.Family;
@@ -48,5 +45,9 @@ public class AuthService {
 
         String token = jwtService.generateToken(family);
         return new AuthResponse(token, FamilyResponseDto.toDto(family));
+    }
+
+    public UsernameCheckResponse checkUsername(String username) {
+        return new UsernameCheckResponse(!familyRepository.existsByUsername(username));
     }
 }

@@ -1,17 +1,11 @@
 package com.familyhub.demo.controller;
 
-import com.familyhub.demo.dto.ApiResponse;
-import com.familyhub.demo.dto.AuthResponse;
-import com.familyhub.demo.dto.LoginRequest;
-import com.familyhub.demo.dto.RegisterRequest;
+import com.familyhub.demo.dto.*;
 import com.familyhub.demo.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -32,4 +26,10 @@ public class AuthController {
         return ResponseEntity.ok().body(new ApiResponse<>(loginResponse, "Login successful"));
     }
 
+    @GetMapping("/check-username")
+    public ResponseEntity<UsernameCheckResponse> checkUsername(
+            @RequestParam(name = "username", required = true) String username) {
+
+       return ResponseEntity.ok(authService.checkUsername(username));
+    }
 }
