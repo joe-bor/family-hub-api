@@ -3,7 +3,8 @@ package com.familyhub.demo.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.jspecify.annotations.Nullable;
@@ -16,7 +17,8 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Data
+@Getter
+@Setter
 public class Family implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -37,6 +39,9 @@ public class Family implements UserDetails {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+    @OneToMany(mappedBy = "family", orphanRemoval = true, cascade = CascadeType.ALL)
+    private List<FamilyMember> familyMembers;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
