@@ -31,6 +31,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         );
     }
 
+    @ExceptionHandler(FamilyMemberNotFound.class)
+    public ResponseEntity<ErrorResponse> handleFamilyMemberNotFound(FamilyMemberNotFound ex, HttpServletRequest request) {
+        return buildErrorResponse(
+                HttpStatus.NOT_FOUND,
+                request,
+                ex.getMessage()
+        );
+    }
+
     @ExceptionHandler(UsernameAlreadyExists.class)
     public ResponseEntity<ErrorResponse> handleUsernameAlreadyExist(UsernameAlreadyExists ex, HttpServletRequest request) {
         return buildErrorResponse(
