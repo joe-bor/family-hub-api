@@ -4,6 +4,7 @@ package com.familyhub.demo.service;
 import com.familyhub.demo.dto.FamilyMemberRequest;
 import com.familyhub.demo.dto.FamilyMemberResponse;
 import com.familyhub.demo.exception.FamilyMemberNotFound;
+import com.familyhub.demo.mapper.FamilyMemberMapper;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.repository.FamilyMemberRepository;
@@ -22,7 +23,7 @@ public class FamilyMemberService {
     public List<FamilyMemberResponse> findAllMembers(Family family) {
          return familyMemberRepository.findByFamily(family)
                  .stream()
-                 .map(FamilyMemberResponse::toDto)
+                 .map(FamilyMemberMapper::toDto)
                  .toList();
     }
 
@@ -31,19 +32,11 @@ public class FamilyMemberService {
         if (!isMemberOfFamily(family, familyMember)) {
             throw new AccessDeniedException("Unauthorized");
         }
-        return FamilyMemberResponse.toDto(familyMember);
+        return FamilyMemberMapper.toDto(familyMember);
     }
 
     public FamilyMember addFamilyMember(Family family, FamilyMemberRequest toAdd) {
-
-        FamilyMember toBeAdded = new FamilyMember();
-        toBeAdded.setFamily(family);
-        toBeAdded.setName(toAdd.name());
-        toBeAdded.setColor(toAdd.color());
-        toBeAdded.setAvatarUrl(toAdd.avatarUrl());
-        toBeAdded.setEmail(toAdd.email());
-
-        return familyMemberRepository.save(toBeAdded);
+        return familyMemberRepository.save(FamilyMemberMapper.toEntity(toAdd, family));
     }
 
     public FamilyMember updateFamilyMember(
