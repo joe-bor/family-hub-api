@@ -17,4 +17,5 @@ public record FamilyMemberRequest(
     String email,
 
     String avatarUrl
-) {}
+) {
+}
