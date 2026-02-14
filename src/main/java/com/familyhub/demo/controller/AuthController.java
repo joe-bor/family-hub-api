@@ -27,9 +27,9 @@ public class AuthController {
     }
 
     @GetMapping("/check-username")
-    public ResponseEntity<UsernameCheckResponse> checkUsername(
+    public ResponseEntity<ApiResponse<UsernameCheckResponse>> checkUsername(
             @RequestParam(name = "username", required = true) String username) {
 
-       return ResponseEntity.ok(authService.checkUsername(username));
+       return ResponseEntity.ok(new ApiResponse<>(authService.checkUsername(username), "Username check"));
     }
 }

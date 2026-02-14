@@ -1,7 +1,9 @@
 package com.familyhub.demo.controller;
 
+import com.familyhub.demo.dto.ApiResponse;
 import com.familyhub.demo.dto.FamilyMemberRequest;
 import com.familyhub.demo.dto.FamilyMemberResponse;
+import com.familyhub.demo.mapper.FamilyMemberMapper;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.service.FamilyMemberService;
@@ -23,41 +25,41 @@ public class FamilyMemberController {
 
 
     @GetMapping
-    public ResponseEntity<List<FamilyMemberResponse>> getFamilyMembers(@AuthenticationPrincipal Family family) {
+    public ResponseEntity<ApiResponse<List<FamilyMemberResponse>>> getFamilyMembers(@AuthenticationPrincipal Family family) {
         List<FamilyMemberResponse> members = familyMemberService.findAllMembers(family);
 
-        return members.isEmpty() ?
-        ResponseEntity.noContent().build() :
-        ResponseEntity.ok(members);
+        return ResponseEntity.ok(new ApiResponse<>(members, "Get members"));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<FamilyMemberResponse> getFamilyMember(
+    public ResponseEntity<ApiResponse<FamilyMemberResponse>> getFamilyMember(
             @AuthenticationPrincipal Family family,
             @PathVariable UUID id
     ) {
-        return ResponseEntity.ok(familyMemberService.findById(family, id));
+        return ResponseEntity.ok(new ApiResponse<>(familyMemberService.findById(family, id), "Get member by id"));
     }
 
     @PostMapping
-    public ResponseEntity<FamilyMemberResponse> addFamilyMember(
+    public ResponseEntity<ApiResponse<FamilyMemberResponse>> addFamilyMember(
             @AuthenticationPrincipal Family family,
             @Valid @RequestBody FamilyMemberRequest request) {
 
         FamilyMember familyMember = familyMemberService.addFamilyMember(family, request);
         URI location =  URI.create("/api/family/members/" + familyMember.getId());
 
-        return ResponseEntity.created(location).body(FamilyMemberResponse.toDto(familyMember));
+        return ResponseEntity.created(location).body(
+                new ApiResponse<>(FamilyMemberMapper.toDto(familyMember), "Family Member Added")
+        );
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<FamilyMemberResponse> updateFamilyMember(
+    public ResponseEntity<ApiResponse<FamilyMemberResponse>> updateFamilyMember(
             @AuthenticationPrincipal Family family,
             @Valid @RequestBody FamilyMemberRequest familyMemberRequest,
             @PathVariable UUID id
     ) {
         FamilyMember familyMember = familyMemberService.updateFamilyMember(family, id, familyMemberRequest);
-        return ResponseEntity.ok(FamilyMemberResponse.toDto(familyMember));
+        return ResponseEntity.ok(new ApiResponse<>(FamilyMemberMapper.toDto(familyMember), "Family Member Updated"));
     }
 
     @DeleteMapping("/{id}")

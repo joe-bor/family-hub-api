@@ -1,10 +1,14 @@
 package com.familyhub.demo.service;
 
+import com.familyhub.demo.dto.FamilyRequest;
+import com.familyhub.demo.dto.FamilyResponse;
 import com.familyhub.demo.exception.FamilyNotFoundException;
+import com.familyhub.demo.mapper.FamilyMapper;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.repository.FamilyRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -23,30 +27,31 @@ public class FamilyService {
                 .orElseThrow(() -> new FamilyNotFoundException(username));
     }
 
+    @Transactional
+    public FamilyResponse findFamilyResponse(UUID familyId) {
+        Family family = familyRepository.findById(familyId)
+                .orElseThrow(() -> new FamilyNotFoundException(familyId));
+        return FamilyMapper.toDto(family);
+    }
+
     public Family findFamilyById(UUID familyId) {
-         return familyRepository.findById(familyId)
-                 .orElseThrow(() -> new FamilyNotFoundException(familyId));
+        return familyRepository.findById(familyId)
+                .orElseThrow(() -> new FamilyNotFoundException(familyId));
     }
 
-    public Family createFamily(Family family) {
-        if (familyRepository.existsByUsername(family.getUsername())) {
-            throw new RuntimeException("Username " + family.getUsername() + " already exists");
-        }
-        return familyRepository.save(family);
-    }
-
-    public Family updateFamily(UUID id, Family family) {
+    @Transactional
+    public FamilyResponse updateFamily(UUID id, FamilyRequest family) {
         Family toBeUpdated = findFamilyById(id);
 
-        if (family.getName() != null) {
-            toBeUpdated.setName(family.getName());
+        if (family.name() != null) {
+            toBeUpdated.setName(family.name());
         }
 
-        if (family.getUsername() != null) {
-            toBeUpdated.setUsername(family.getUsername());
+        if (family.username() != null) {
+            toBeUpdated.setUsername(family.username());
         }
 
-        return familyRepository.save(toBeUpdated);
+        return FamilyMapper.toDto(familyRepository.save(toBeUpdated));
     }
 
     public void deleteFamily(UUID id) {
