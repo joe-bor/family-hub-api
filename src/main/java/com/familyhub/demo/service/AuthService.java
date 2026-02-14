@@ -1,13 +1,19 @@
 package com.familyhub.demo.service;
 
-import com.familyhub.demo.dto.*;
+import com.familyhub.demo.dto.AuthResponse;
+import com.familyhub.demo.dto.LoginRequest;
+import com.familyhub.demo.dto.RegisterRequest;
+import com.familyhub.demo.dto.UsernameCheckResponse;
 import com.familyhub.demo.exception.InvalidCredentialException;
 import com.familyhub.demo.exception.UsernameAlreadyExists;
+import com.familyhub.demo.mapper.FamilyMapper;
+import com.familyhub.demo.mapper.FamilyMemberMapper;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.repository.FamilyRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -16,6 +22,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
+    @Transactional
     public AuthResponse register(RegisterRequest registerRequest) {
         // Check if username already exists
         if (familyRepository.existsByUsername(registerRequest.username())) {
@@ -24,17 +31,23 @@ public class AuthService {
 
         // Hash password then save to db
         Family family = new Family();
-        family.setName("hard-code family name"); // TODO: this will come from the frontend (form data)
+        family.setName(registerRequest.familyName());
         family.setUsername(registerRequest.username());
         family.setPasswordHash(passwordEncoder.encode(registerRequest.password()));
+        family.setFamilyMembers(
+                registerRequest.members().stream()
+                        .map(request -> FamilyMemberMapper.toEntity(request, family))
+                        .toList()
+        );
         Family saved = familyRepository.save(family);
 
         // Create JWT and return response
         String token = jwtService.generateToken(saved);
 
-        return new AuthResponse(token, FamilyResponseDto.toDto(saved));
+        return new AuthResponse(token, FamilyMapper.toDto(saved));
     }
 
+    @Transactional
     public AuthResponse login(LoginRequest loginRequest) {
         Family family = familyRepository.findByUsername(loginRequest.username())
                 .orElse(null);
@@ -44,7 +57,7 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(family);
-        return new AuthResponse(token, FamilyResponseDto.toDto(family));
+        return new AuthResponse(token, FamilyMapper.toDto(family));
     }
 
     public UsernameCheckResponse checkUsername(String username) {
