@@ -4,6 +4,7 @@ import com.familyhub.demo.dto.CalendarEventRequest;
 import com.familyhub.demo.dto.CalendarEventResponse;
 import com.familyhub.demo.model.CalendarEvent;
 import com.familyhub.demo.model.Family;
+import com.familyhub.demo.model.FamilyMember;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -17,13 +18,14 @@ public class CalendarEventMapper {
 
 
 
-    public static CalendarEvent toEntity(CalendarEventRequest request, Family family) {
+    public static CalendarEvent toEntity(CalendarEventRequest request, Family family, FamilyMember familyMember) {
         CalendarEvent calendarEvent = new CalendarEvent();
 
         calendarEvent.setTitle(request.title());
         calendarEvent.setStartTime(stringToLocalTime(request.startTime()));
         calendarEvent.setEndTime(stringToLocalTime(request.endTime()));
         calendarEvent.setDate(stringToDate(request.date()));
+        calendarEvent.setMember(familyMember);
         calendarEvent.setFamily(family);
         calendarEvent.setAllDay(request.isAllDay());
         calendarEvent.setLocation(request.location());
