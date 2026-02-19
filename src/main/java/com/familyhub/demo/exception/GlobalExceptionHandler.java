@@ -22,17 +22,8 @@ import java.util.List;
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
-    @ExceptionHandler(FamilyNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleFamilyNotFound(FamilyNotFoundException ex, HttpServletRequest request) {
-        return buildErrorResponse(
-                HttpStatus.NOT_FOUND,
-                request,
-                ex.getMessage()
-        );
-    }
-
-    @ExceptionHandler(FamilyMemberNotFound.class)
-    public ResponseEntity<ErrorResponse> handleFamilyMemberNotFound(FamilyMemberNotFound ex, HttpServletRequest request) {
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
         return buildErrorResponse(
                 HttpStatus.NOT_FOUND,
                 request,
