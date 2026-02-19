@@ -2,7 +2,7 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.dto.FamilyRequest;
 import com.familyhub.demo.dto.FamilyResponse;
-import com.familyhub.demo.exception.FamilyNotFoundException;
+import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.mapper.FamilyMapper;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.repository.FamilyRepository;
@@ -22,21 +22,16 @@ public class FamilyService {
         return familyRepository.findAll();
     }
 
-    public Family findByUsername(String username) {
-        return familyRepository.findByUsername(username)
-                .orElseThrow(() -> new FamilyNotFoundException(username));
-    }
-
     @Transactional
     public FamilyResponse findFamilyResponse(UUID familyId) {
         Family family = familyRepository.findById(familyId)
-                .orElseThrow(() -> new FamilyNotFoundException(familyId));
+                .orElseThrow(() -> new ResourceNotFoundException("Family", familyId));
         return FamilyMapper.toDto(family);
     }
 
     public Family findFamilyById(UUID familyId) {
         return familyRepository.findById(familyId)
-                .orElseThrow(() -> new FamilyNotFoundException(familyId));
+                .orElseThrow(() -> new ResourceNotFoundException("Family", familyId));
     }
 
     @Transactional

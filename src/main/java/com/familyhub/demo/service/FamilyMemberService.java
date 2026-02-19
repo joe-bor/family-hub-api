@@ -3,7 +3,7 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.dto.FamilyMemberRequest;
 import com.familyhub.demo.dto.FamilyMemberResponse;
-import com.familyhub.demo.exception.FamilyMemberNotFound;
+import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.mapper.FamilyMemberMapper;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
@@ -78,7 +78,7 @@ public class FamilyMemberService {
 
     private FamilyMember findById(UUID familyMemberId) {
         return familyMemberRepository.findById(familyMemberId)
-                .orElseThrow(() -> new FamilyMemberNotFound(familyMemberId));
+                .orElseThrow(() -> new ResourceNotFoundException("Family Member", familyMemberId));
     }
 
     private boolean isMemberOfFamily(Family family, FamilyMember familyMember) {
