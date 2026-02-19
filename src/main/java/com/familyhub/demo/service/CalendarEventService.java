@@ -19,11 +19,11 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class CalendarEventService {
     private final CalendarEventRepository calendarEventRepository;
     private final FamilyMemberRepository familyMemberRepository;
 
-    @Transactional(readOnly = true)
     public List<CalendarEventResponse> getAllEventsByFamily(Family family) {
         List<CalendarEvent> eventsByFamily = calendarEventRepository.findByFamily(family);
 
@@ -39,7 +39,7 @@ public class CalendarEventService {
         return CalendarEventMapper.toDto(calendarEvent);
     }
 
-
+    @Transactional
     public CalendarEventResponse addCalendarEvent(CalendarEventRequest request, Family family) {
         // Validate memberId passed belongs to logged in Family
         FamilyMember familyMember = familyMemberRepository.findById(request.memberId())
@@ -85,7 +85,6 @@ public class CalendarEventService {
 
         return CalendarEventMapper.toDto(saved);
     }
-
 
     @Transactional
     public void deleteCalendarEvent(UUID id, Family family) {
