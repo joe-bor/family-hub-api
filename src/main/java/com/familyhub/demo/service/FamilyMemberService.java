@@ -11,12 +11,14 @@ import com.familyhub.demo.repository.FamilyMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class FamilyMemberService {
     private final FamilyMemberRepository familyMemberRepository;
 
@@ -35,10 +37,12 @@ public class FamilyMemberService {
         return FamilyMemberMapper.toDto(familyMember);
     }
 
+    @Transactional
     public FamilyMember addFamilyMember(Family family, FamilyMemberRequest toAdd) {
         return familyMemberRepository.save(FamilyMemberMapper.toEntity(toAdd, family));
     }
 
+    @Transactional
     public FamilyMember updateFamilyMember(
             Family family,
             UUID familyMemberId,
@@ -62,6 +66,7 @@ public class FamilyMemberService {
         return familyMemberRepository.save(toBeUpdated);
     }
 
+    @Transactional
     public void deleteFamilyMember(Family family, UUID familyMemberId) {
         // Check if familyMember with passed uuid exists
         FamilyMember toBeDeleted = findById(familyMemberId);

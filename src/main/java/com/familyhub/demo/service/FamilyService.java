@@ -10,17 +10,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class FamilyService {
     private final FamilyRepository familyRepository;
-
-    public List<Family> findAllFamilies() {
-        return familyRepository.findAll();
-    }
 
     @Transactional
     public FamilyResponse findFamilyResponse(UUID familyId) {
@@ -49,6 +45,7 @@ public class FamilyService {
         return FamilyMapper.toDto(familyRepository.save(toBeUpdated));
     }
 
+    @Transactional
     public void deleteFamily(UUID id) {
         Family toBeDeleted = findFamilyById(id);
         familyRepository.delete(toBeDeleted);
