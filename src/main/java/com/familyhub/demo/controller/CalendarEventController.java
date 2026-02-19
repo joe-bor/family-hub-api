@@ -46,6 +46,27 @@ public class CalendarEventController {
         CalendarEventResponse calendarEventResponse = calendarEventService.addCalendarEvent(request, family);
 
         URI location = URI.create("/api/calendar/events/" + calendarEventResponse.id());
-        return ResponseEntity.created(location).body(new ApiResponse<>(calendarEventResponse, "Event created"));
+        return ResponseEntity.created(location).body(new ApiResponse<>(calendarEventResponse, "Event created successfully"));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<CalendarEventResponse>> updateCalendarEvent(
+            @Valid @RequestBody CalendarEventRequest request,
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Family family
+    ) {
+        CalendarEventResponse response = calendarEventService.updateCalendarEvent(request, id, family);
+
+        return ResponseEntity.ok(new ApiResponse<>(response, "Event updated successfully"));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteCalendarEvent(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Family family
+    ) {
+        calendarEventService.deleteCalendarEvent(id, family);
+
+        return ResponseEntity.noContent().build();
     }
 }
