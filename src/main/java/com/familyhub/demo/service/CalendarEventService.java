@@ -14,8 +14,11 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -24,10 +27,38 @@ public class CalendarEventService {
     private final CalendarEventRepository calendarEventRepository;
     private final FamilyMemberRepository familyMemberRepository;
 
-    public List<CalendarEventResponse> getAllEventsByFamily(Family family) {
-        List<CalendarEvent> eventsByFamily = calendarEventRepository.findByFamily(family);
+    public List<CalendarEventResponse> getAllEventsByFamily(
+            Family family,
+            LocalDate startDate,
+            LocalDate endDate,
+            UUID memberId
+    ) {
+        Stream<CalendarEvent> calendarEventStream = calendarEventRepository.findByFamily(family).stream();
 
-        return eventsByFamily.stream()
+        Predicate<CalendarEvent> byMemberId = event -> event.getMember().getId().equals(memberId);
+        Predicate<CalendarEvent> byStartDateInclusive = event -> !event.getDate().isBefore(startDate); // is it "on or after"
+        Predicate<CalendarEvent> byEndDateInclusive = event -> !event.getDate().isAfter(endDate);
+
+        if (memberId != null) {
+            // Validate memberId passed belongs to logged in Family
+            FamilyMember familyMember = familyMemberRepository.findById(memberId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Family Member", memberId));
+            if (!familyMember.getFamily().getId().equals(family.getId())) {
+                throw new AccessDeniedException("Access Denied -- CalendarEventService.getAllEventsByFamily()");
+            }
+
+            calendarEventStream = calendarEventStream.filter(byMemberId);
+        }
+
+        if (startDate != null) {
+            calendarEventStream = calendarEventStream.filter(byStartDateInclusive);
+        }
+
+        if (endDate != null) {
+            calendarEventStream = calendarEventStream.filter(byEndDateInclusive);
+        }
+
+        return calendarEventStream
                 .map(CalendarEventMapper::toDto)
                 .toList();
     }

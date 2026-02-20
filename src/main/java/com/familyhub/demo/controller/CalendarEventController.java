@@ -12,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,8 +24,15 @@ public class CalendarEventController {
 
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getAllCalendarEventsByFamily(@AuthenticationPrincipal Family family) {
-        List<CalendarEventResponse> allEventsByFamily = calendarEventService.getAllEventsByFamily(family);
+    public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getAllCalendarEventsByFamily(
+            @AuthenticationPrincipal Family family,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(required = false) UUID memberId
+            ) {
+        List<CalendarEventResponse> allEventsByFamily =
+                calendarEventService.getAllEventsByFamily(family,startDate,endDate,memberId);
+
         return ResponseEntity.ok(new ApiResponse<>(allEventsByFamily, ""));
     }
 
