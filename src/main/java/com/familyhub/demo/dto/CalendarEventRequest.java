@@ -24,7 +24,7 @@ public record CalendarEventRequest(
         UUID memberId,
 
         // optional
-        boolean isAllDay,
+        Boolean isAllDay,
 
         // optional
         String location
