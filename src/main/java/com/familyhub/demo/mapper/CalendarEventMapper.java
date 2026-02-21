@@ -27,7 +27,7 @@ public class CalendarEventMapper {
         calendarEvent.setDate(stringToDate(request.date()));
         calendarEvent.setMember(familyMember);
         calendarEvent.setFamily(family);
-        calendarEvent.setAllDay(request.isAllDay());
+        calendarEvent.setAllDay(request.isAllDay() != null && request.isAllDay());
         calendarEvent.setLocation(request.location());
 
         return  calendarEvent;
