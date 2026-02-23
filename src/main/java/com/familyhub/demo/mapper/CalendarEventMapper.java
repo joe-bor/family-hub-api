@@ -9,6 +9,7 @@ import com.familyhub.demo.model.FamilyMember;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Locale;
 
 public class CalendarEventMapper {
@@ -50,11 +51,23 @@ public class CalendarEventMapper {
         return localTime.format(timeFormatter);
     }
 
-    private static LocalTime stringToLocalTime(String time) { return LocalTime.parse(time, timeFormatter); }
+    private static LocalTime stringToLocalTime(String time) {
+        try {
+            return LocalTime.parse(time, timeFormatter);
+        } catch (DateTimeParseException e) {
+            throw new RuntimeException("Error Parsing: " + time);
+        }
+    }
 
     private static String dateToString(LocalDate localDate) {
         return localDate.format(dateFormatter);
     }
 
-    private static LocalDate stringToDate(String date) { return LocalDate.parse(date, dateFormatter); }
+    private static LocalDate stringToDate(String date) {
+        try {
+            return LocalDate.parse(date, dateFormatter);
+        } catch (DateTimeParseException e) {
+            throw new RuntimeException("Error Parsing: " + date);
+        }
+    }
 }
