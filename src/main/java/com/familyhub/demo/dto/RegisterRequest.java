@@ -13,10 +13,11 @@ public record RegisterRequest(
     String username,
 
     @NotBlank(message = "Password is required")
-    @Size(min = 8, message = "Password must be at least 8 characters")
+    @Size(min = 8, max = 100, message = "Password must be between 8 - 100 characters")
     String password,
 
     @NotBlank(message = "Family name is required")
+    @Size(max = 50, message = "Family name must be 50 characters or less")
     String familyName,
 
     @NotEmpty(message = "A family must have at least one member")
