@@ -3,7 +3,7 @@ package com.familyhub.demo.dto;
 import jakarta.validation.constraints.Size;
 
 public record FamilyRequest(
-        @Size(min = 1, message = "Name cannot be blank")
+        @Size(min = 1, max = 50, message = "Name must be between 1 and 50 characters")
         String name,
 
         @Size(min = 3, max = 20, message = "Username must be between 3 and 20 characters")
