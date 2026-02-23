@@ -2,6 +2,7 @@ package com.familyhub.demo.mapper;
 
 import com.familyhub.demo.dto.CalendarEventRequest;
 import com.familyhub.demo.dto.CalendarEventResponse;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.model.CalendarEvent;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
@@ -55,7 +56,7 @@ public class CalendarEventMapper {
         try {
             return LocalTime.parse(time, timeFormatter);
         } catch (DateTimeParseException e) {
-            throw new RuntimeException("Error Parsing: " + time);
+            throw new BadRequestException("Error Parsing: " + time);
         }
     }
 
@@ -67,7 +68,7 @@ public class CalendarEventMapper {
         try {
             return LocalDate.parse(date, dateFormatter);
         } catch (DateTimeParseException e) {
-            throw new RuntimeException("Error Parsing: " + date);
+            throw new BadRequestException("Error Parsing: " + date);
         }
     }
 }

@@ -2,6 +2,7 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.dto.CalendarEventRequest;
 import com.familyhub.demo.dto.CalendarEventResponse;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.mapper.CalendarEventMapper;
 import com.familyhub.demo.model.CalendarEvent;
@@ -81,9 +82,7 @@ public class CalendarEventService {
 
         // We turn DTO to an Entity so we can save it in our DB
         CalendarEvent calendarEvent = CalendarEventMapper.toEntity(request, family, familyMember);
-        if (calendarEvent.getStartTime().isAfter(calendarEvent.getEndTime())) {
-            throw new IllegalArgumentException("Start time must be before end time");
-        }
+        isEventTimeRangeValid(calendarEvent);
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
 
@@ -106,9 +105,7 @@ public class CalendarEventService {
 
         // Map DTO to Entity to handle `string <-> date/time` conversions
         CalendarEvent update = CalendarEventMapper.toEntity(request, family, familyMember);
-        if (update.getStartTime().isAfter(update.getEndTime())) {
-            throw new IllegalArgumentException("Start time must be before end time");
-        }
+        isEventTimeRangeValid(update);
 
         // Apply changes
         calendarEvent.setTitle(update.getTitle());
@@ -130,5 +127,12 @@ public class CalendarEventService {
                 .orElseThrow(() -> new ResourceNotFoundException("Calendar Event", id));
 
         calendarEventRepository.delete(calendarEvent);
+    }
+
+    private void isEventTimeRangeValid(CalendarEvent event) {
+        //  an "all day event" should not be constrained by this check. (eg. Birthday 12 AM - 12 AM)
+        if (!event.isAllDay() && event.getStartTime().isAfter(event.getEndTime())) {
+            throw new BadRequestException("Start time must be before end time");
+        }
     }
 }
