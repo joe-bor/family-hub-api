@@ -81,6 +81,10 @@ public class CalendarEventService {
 
         // We turn DTO to an Entity so we can save it in our DB
         CalendarEvent calendarEvent = CalendarEventMapper.toEntity(request, family, familyMember);
+        if (calendarEvent.getStartTime().isAfter(calendarEvent.getEndTime())) {
+            throw new IllegalArgumentException("Start time must be before end time");
+        }
+
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
 
         return CalendarEventMapper.toDto(saved);
@@ -102,6 +106,9 @@ public class CalendarEventService {
 
         // Map DTO to Entity to handle `string <-> date/time` conversions
         CalendarEvent update = CalendarEventMapper.toEntity(request, family, familyMember);
+        if (update.getStartTime().isAfter(update.getEndTime())) {
+            throw new IllegalArgumentException("Start time must be before end time");
+        }
 
         // Apply changes
         calendarEvent.setTitle(update.getTitle());
