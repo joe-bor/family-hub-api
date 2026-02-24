@@ -19,7 +19,7 @@ public record FamilyMemberRequest(
     @Size(max = 254, message = "Email is too long")
     String email,
 
-    @Size(max = 2048, message = "Avatar url is too long")
+    @Size(max = 254, message = "Avatar url is too long")
     String avatarUrl
 ) {
 }
