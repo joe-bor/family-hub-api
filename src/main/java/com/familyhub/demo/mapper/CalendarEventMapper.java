@@ -7,7 +7,6 @@ import com.familyhub.demo.model.CalendarEvent;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 
-import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -16,7 +15,6 @@ import java.util.Locale;
 public class CalendarEventMapper {
     private CalendarEventMapper() {}
     private static final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("h:mm a", Locale.US);
-    private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US);
 
 
 
@@ -26,7 +24,7 @@ public class CalendarEventMapper {
         calendarEvent.setTitle(request.title());
         calendarEvent.setStartTime(stringToLocalTime(request.startTime()));
         calendarEvent.setEndTime(stringToLocalTime(request.endTime()));
-        calendarEvent.setDate(stringToDate(request.date()));
+        calendarEvent.setDate(request.date());
         calendarEvent.setMember(familyMember);
         calendarEvent.setFamily(family);
         calendarEvent.setAllDay(request.isAllDay() != null && request.isAllDay());
@@ -41,7 +39,7 @@ public class CalendarEventMapper {
                 .title(calendarEvent.getTitle())
                 .startTime(timeToString(calendarEvent.getStartTime()))
                 .endTime(timeToString(calendarEvent.getEndTime()))
-                .date(dateToString(calendarEvent.getDate()))
+                .date(calendarEvent.getDate())
                 .memberId(calendarEvent.getMember().getId())
                 .isAllDay(calendarEvent.isAllDay())
                 .location(calendarEvent.getLocation())
@@ -57,18 +55,6 @@ public class CalendarEventMapper {
             return LocalTime.parse(time, timeFormatter);
         } catch (DateTimeParseException e) {
             throw new BadRequestException("Error Parsing: " + time);
-        }
-    }
-
-    private static String dateToString(LocalDate localDate) {
-        return localDate.format(dateFormatter);
-    }
-
-    private static LocalDate stringToDate(String date) {
-        try {
-            return LocalDate.parse(date, dateFormatter);
-        } catch (DateTimeParseException e) {
-            throw new BadRequestException("Error Parsing: " + date);
         }
     }
 }
