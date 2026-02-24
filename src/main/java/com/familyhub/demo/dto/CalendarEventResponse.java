@@ -1,7 +1,9 @@
 package com.familyhub.demo.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Builder;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Builder
@@ -10,7 +12,8 @@ public record CalendarEventResponse(
         String title,
         String startTime,
         String endTime,
-        String date,
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        LocalDate date,
         UUID memberId,
         boolean isAllDay,
         String location

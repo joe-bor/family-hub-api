@@ -1,10 +1,12 @@
 package com.familyhub.demo.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record CalendarEventRequest(
@@ -20,9 +22,9 @@ public record CalendarEventRequest(
         @Pattern(regexp = "^(1[0-2]|[1-9]):[0-5][0-9] (AM|PM)$", message = "Time must be in 12-hour format (e.g., 2:00 PM)")
         String endTime,
 
-        @NotEmpty
-        @Pattern(regexp = "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])$")
-        String date,
+        @NotNull
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        LocalDate date,
 
         @NotNull
         UUID memberId,
