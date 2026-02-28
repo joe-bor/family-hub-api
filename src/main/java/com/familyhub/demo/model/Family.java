@@ -25,13 +25,15 @@ public class Family implements UserDetails {
     private UUID id;
 
     @NotBlank
+    @Column(nullable = false)
     private String name;
 
     @NotBlank
-    @Column(unique = true)
+    @Column(unique = true, nullable = false)
     private String username;
 
     @JsonIgnore
+    @Column(nullable = false)
     private String passwordHash;
 
     @CreationTimestamp
