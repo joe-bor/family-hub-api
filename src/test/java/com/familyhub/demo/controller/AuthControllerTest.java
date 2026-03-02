@@ -139,6 +139,70 @@ class AuthControllerTest {
     }
 
     @Test
+    void register_shortUsername_returns400WithFieldError() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "username": "ab",
+                                    "password": "password123",
+                                    "familyName": "Test Family",
+                                    "members": [{"name": "John", "color": "coral"}]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'username')]").exists());
+    }
+
+    @Test
+    void register_shortPassword_returns400WithFieldError() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "username": "validuser",
+                                    "password": "short",
+                                    "familyName": "Test Family",
+                                    "members": [{"name": "John", "color": "coral"}]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'password')]").exists());
+    }
+
+    @Test
+    void register_emptyFamilyName_returns400WithFieldError() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "username": "validuser",
+                                    "password": "password123",
+                                    "familyName": "",
+                                    "members": [{"name": "John", "color": "coral"}]
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'familyName')]").exists());
+    }
+
+    @Test
+    void register_emptyMembers_returns400WithFieldError() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "username": "validuser",
+                                    "password": "password123",
+                                    "familyName": "Test Family",
+                                    "members": []
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[?(@.field == 'members')]").exists());
+    }
+
+    @Test
     void checkUsername_returns200() throws Exception {
         when(authService.checkUsername("testfamily")).thenReturn(new UsernameCheckResponse(true));
 
