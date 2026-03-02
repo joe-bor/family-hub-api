@@ -61,6 +61,8 @@ class CalendarEventRepositoryTest {
         event.setDate(LocalDate.of(2026, 3, 15));
         event.setFamily(family);
         event.setMember(member);
+        family.getCalendarEvents().add(event);
+        member.getCalendarEvents().add(event);
         return calendarEventRepository.save(event);
     }
 
@@ -116,19 +118,36 @@ class CalendarEventRepositoryTest {
         FamilyMember member = createAndSaveMember(family);
         createAndSaveEvent(family, member);
 
-        // Add member to family's collection so cascade is aware
         family.getFamilyMembers().add(member);
         familyRepository.save(family);
 
         assertThat(calendarEventRepository.findByFamily(family)).hasSize(1);
 
-        // Delete event first (no cascade from member), then family handles member cascade
-        calendarEventRepository.deleteAll(calendarEventRepository.findByFamily(family));
-        calendarEventRepository.flush();
         familyRepository.delete(family);
         familyRepository.flush();
 
         assertThat(calendarEventRepository.findAll()).isEmpty();
         assertThat(familyMemberRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    void cascadeDelete_whenMemberDeleted() {
+        Family family = createAndSaveFamily("member_cascade");
+        FamilyMember member = createAndSaveMember(family);
+        CalendarEvent event = createAndSaveEvent(family, member);
+
+        family.getFamilyMembers().add(member);
+        familyRepository.save(family);
+
+        assertThat(calendarEventRepository.findByFamily(family)).hasSize(1);
+
+        // Remove event from family's collection and member from family — orphanRemoval handles deletion
+        family.getCalendarEvents().remove(event);
+        family.getFamilyMembers().remove(member);
+        familyRepository.saveAndFlush(family);
+
+        assertThat(calendarEventRepository.findAll()).isEmpty();
+        assertThat(familyMemberRepository.findAll()).isEmpty();
+        assertThat(familyRepository.findAll()).hasSize(1);
     }
 }

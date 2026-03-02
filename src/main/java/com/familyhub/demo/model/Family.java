@@ -12,6 +12,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -44,6 +45,9 @@ public class Family implements UserDetails {
 
     @OneToMany(mappedBy = "family", orphanRemoval = true, cascade = CascadeType.ALL)
     private List<FamilyMember> familyMembers;
+
+    @OneToMany(mappedBy = "family", orphanRemoval = true, cascade = CascadeType.ALL)
+    private List<CalendarEvent> calendarEvents = new ArrayList<>();
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
