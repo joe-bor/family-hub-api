@@ -1,20 +1,23 @@
 package com.familyhub.demo.controller;
 
 import com.familyhub.demo.TestDataFactory;
-import com.familyhub.demo.config.JwtConfig;
+import com.familyhub.demo.config.SecurityConfig;
 import com.familyhub.demo.dto.FamilyMemberResponse;
 import com.familyhub.demo.model.Family;
-import com.familyhub.demo.model.FamilyColor;
 import com.familyhub.demo.model.FamilyMember;
+import com.familyhub.demo.security.JwtAuthenticationEntryPoint;
+import com.familyhub.demo.security.JwtAuthenticationFilter;
 import com.familyhub.demo.security.WithMockFamily;
 import com.familyhub.demo.service.FamilyMemberService;
 import com.familyhub.demo.service.FamilyService;
 import com.familyhub.demo.service.JwtService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -27,6 +30,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(FamilyMemberController.class)
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtAuthenticationEntryPoint.class})
+@ActiveProfiles("test")
 class FamilyMemberControllerTest {
 
     @Autowired
@@ -35,13 +40,10 @@ class FamilyMemberControllerTest {
     @MockitoBean
     private FamilyMemberService familyMemberService;
 
-    // Required by security filter chain
     @MockitoBean
     private JwtService jwtService;
     @MockitoBean
     private FamilyService familyService;
-    @MockitoBean
-    private JwtConfig jwtConfig;
 
     @Test
     @WithMockFamily

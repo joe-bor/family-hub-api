@@ -1,12 +1,16 @@
 package com.familyhub.demo.controller;
 
-import com.familyhub.demo.config.JwtConfig;
+import com.familyhub.demo.config.SecurityConfig;
+import com.familyhub.demo.security.JwtAuthenticationEntryPoint;
+import com.familyhub.demo.security.JwtAuthenticationFilter;
 import com.familyhub.demo.service.FamilyService;
 import com.familyhub.demo.service.JwtService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.test.bean.override.mockito.MockitoBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -14,18 +18,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(HealthController.class)
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtAuthenticationEntryPoint.class})
+@ActiveProfiles("test")
 class HealthControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    // Required by security filter chain
     @MockitoBean
     private JwtService jwtService;
     @MockitoBean
     private FamilyService familyService;
-    @MockitoBean
-    private JwtConfig jwtConfig;
 
     @Test
     void health_returnsUp_noAuthRequired() throws Exception {

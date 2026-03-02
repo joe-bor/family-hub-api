@@ -4,7 +4,7 @@ import com.familyhub.demo.config.TestcontainersConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -31,7 +31,7 @@ class CalendarEventIntegrationTest {
     @BeforeEach
     void setUp() throws Exception {
         // Register a family and extract token + memberId
-        String uniqueUsername = "cal_test_" + System.nanoTime();
+        String uniqueUsername = "ct" + (System.nanoTime() % 100000000);
         MvcResult result = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -100,7 +100,7 @@ class CalendarEventIntegrationTest {
     @Test
     void crossFamilyAccess_denied() throws Exception {
         // Register a second family
-        String otherUsername = "other_" + System.nanoTime();
+        String otherUsername = "ot" + (System.nanoTime() % 100000000);
         MvcResult otherResult = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""

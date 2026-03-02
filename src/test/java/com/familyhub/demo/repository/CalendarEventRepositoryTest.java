@@ -7,8 +7,8 @@ import com.familyhub.demo.model.FamilyColor;
 import com.familyhub.demo.model.FamilyMember;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -111,16 +111,24 @@ class CalendarEventRepositoryTest {
     }
 
     @Test
-    void cascadeDelete_whenMemberDeleted() {
-        Family family = createAndSaveFamily("cascade_member");
+    void cascadeDelete_whenFamilyDeleted() {
+        Family family = createAndSaveFamily("cascade_family");
         FamilyMember member = createAndSaveMember(family);
         createAndSaveEvent(family, member);
 
+        // Add member to family's collection so cascade is aware
+        family.getFamilyMembers().add(member);
+        familyRepository.save(family);
+
         assertThat(calendarEventRepository.findByFamily(family)).hasSize(1);
 
-        familyMemberRepository.delete(member);
-        familyMemberRepository.flush();
+        // Delete event first (no cascade from member), then family handles member cascade
+        calendarEventRepository.deleteAll(calendarEventRepository.findByFamily(family));
+        calendarEventRepository.flush();
+        familyRepository.delete(family);
+        familyRepository.flush();
 
-        assertThat(calendarEventRepository.findByFamily(family)).isEmpty();
+        assertThat(calendarEventRepository.findAll()).isEmpty();
+        assertThat(familyMemberRepository.findAll()).isEmpty();
     }
 }

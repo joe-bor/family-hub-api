@@ -1,7 +1,7 @@
 package com.familyhub.demo.controller;
 
 import com.familyhub.demo.TestDataFactory;
-import com.familyhub.demo.config.JwtConfig;
+import com.familyhub.demo.config.SecurityConfig;
 import com.familyhub.demo.dto.AuthResponse;
 import com.familyhub.demo.dto.FamilyResponse;
 import com.familyhub.demo.dto.UsernameCheckResponse;
@@ -14,9 +14,11 @@ import com.familyhub.demo.service.FamilyService;
 import com.familyhub.demo.service.JwtService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -30,6 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtAuthenticationEntryPoint.class})
+@ActiveProfiles("test")
 class AuthControllerTest {
 
     @Autowired
@@ -38,13 +42,10 @@ class AuthControllerTest {
     @MockitoBean
     private AuthService authService;
 
-    // Required by security filter chain
     @MockitoBean
     private JwtService jwtService;
     @MockitoBean
     private FamilyService familyService;
-    @MockitoBean
-    private JwtConfig jwtConfig;
 
     @Test
     void register_returns200() throws Exception {

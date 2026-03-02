@@ -6,8 +6,8 @@ import com.familyhub.demo.model.FamilyColor;
 import com.familyhub.demo.model.FamilyMember;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -62,7 +62,11 @@ class FamilyMemberRepositoryTest {
     @Test
     void cascadeDelete_whenFamilyDeleted() {
         Family family = createAndSaveFamily("cascade_test");
-        createAndSaveMember(family, "Alice", FamilyColor.CORAL);
+        FamilyMember member = createAndSaveMember(family, "Alice", FamilyColor.CORAL);
+
+        // Add member to family's collection so cascade is aware
+        family.getFamilyMembers().add(member);
+        familyRepository.save(family);
 
         assertThat(familyMemberRepository.findByFamily(family)).hasSize(1);
 
