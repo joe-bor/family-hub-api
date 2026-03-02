@@ -27,17 +27,19 @@ class AuthIntegrationTest {
 
     @Test
     void fullRegisterLoginFlow() throws Exception {
+        String username = "auth" + (System.nanoTime() % 100000000);
+
         // Register
         MvcResult registerResult = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                    "username": "integrationtest",
+                                    "username": "%s",
                                     "password": "password123",
                                     "familyName": "Integration Family",
                                     "members": [{"name": "Alice", "color": "coral"}]
                                 }
-                                """))
+                                """.formatted(username)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.token").isString())
                 .andExpect(jsonPath("$.data.family.name").value("Integration Family"))
@@ -52,10 +54,10 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                    "username": "integrationtest",
+                                    "username": "%s",
                                     "password": "password123"
                                 }
-                                """))
+                                """.formatted(username)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.token").isString());
 
@@ -97,17 +99,19 @@ class AuthIntegrationTest {
 
     @Test
     void register_duplicateUsername_returns409() throws Exception {
+        String username = "dup" + (System.nanoTime() % 100000000);
+
         // First registration
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                    "username": "duplicate_user",
+                                    "username": "%s",
                                     "password": "password123",
                                     "familyName": "First Family",
                                     "members": [{"name": "Bob", "color": "teal"}]
                                 }
-                                """))
+                                """.formatted(username)))
                 .andExpect(status().isOk());
 
         // Duplicate registration
@@ -115,12 +119,12 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                    "username": "duplicate_user",
+                                    "username": "%s",
                                     "password": "password123",
                                     "familyName": "Second Family",
                                     "members": [{"name": "Charlie", "color": "green"}]
                                 }
-                                """))
+                                """.formatted(username)))
                 .andExpect(status().isConflict());
     }
 }
