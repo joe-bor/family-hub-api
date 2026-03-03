@@ -1,0 +1,131 @@
+package com.familyhub.demo.integration;
+
+import com.familyhub.demo.config.TestcontainersConfig;
+import com.jayway.jsonpath.JsonPath;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(TestcontainersConfig.class)
+@ActiveProfiles("test")
+class CalendarEventIntegrationTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    private String token;
+    private String memberId;
+
+    private String registerAndExtract(String username) throws Exception {
+        return mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "username": "%s",
+                                    "password": "password123",
+                                    "familyName": "Event Family",
+                                    "members": [
+                                        { "name": "Member", "color": "teal", "email": "m@test.com" }
+                                    ]
+                                }
+                                """.formatted(username)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    @BeforeEach
+    void setUp() throws Exception {
+        String username = "user" + System.nanoTime();
+        String body = registerAndExtract(username);
+        token = JsonPath.read(body, "$.data.token");
+        memberId = JsonPath.read(body, "$.data.family.members[0].id");
+    }
+
+    private String eventJson(String memberId) {
+        return """
+                {
+                    "title": "Integration Event",
+                    "startTime": "9:00 AM",
+                    "endTime": "10:00 AM",
+                    "date": "2025-06-15",
+                    "memberId": "%s",
+                    "isAllDay": false,
+                    "location": "Test Location"
+                }
+                """.formatted(memberId);
+    }
+
+    @Test
+    void fullEventLifecycle() throws Exception {
+        // Create
+        String createBody = mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(eventJson(memberId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.title").value("Integration Event"))
+                .andExpect(jsonPath("$.data.memberId").value(memberId))
+                .andReturn().getResponse().getContentAsString();
+
+        String eventId = JsonPath.read(createBody, "$.data.id");
+
+        // Query by date range — event should be present
+        mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-06-01")
+                        .param("endDate", "2025-06-30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '%s')]".formatted(eventId)).exists());
+
+        // Get by ID
+        mockMvc.perform(get("/api/calendar/events/{id}", eventId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(eventId))
+                .andExpect(jsonPath("$.data.title").value("Integration Event"));
+
+        // Delete
+        mockMvc.perform(delete("/api/calendar/events/{id}", eventId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+
+        // Verify gone
+        mockMvc.perform(get("/api/calendar/events/{id}", eventId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void crossFamilyAccess_denied() throws Exception {
+        // Family A creates an event
+        String createBody = mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(eventJson(memberId)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String eventId = JsonPath.read(createBody, "$.data.id");
+
+        // Family B registers
+        String familyBUsername = "user" + System.nanoTime();
+        String familyBBody = registerAndExtract(familyBUsername);
+        String familyBToken = JsonPath.read(familyBBody, "$.data.token");
+
+        // Family B tries to access Family A's event — gets 404
+        mockMvc.perform(get("/api/calendar/events/{id}", eventId)
+                        .header("Authorization", "Bearer " + familyBToken))
+                .andExpect(status().isNotFound());
+    }
+}
