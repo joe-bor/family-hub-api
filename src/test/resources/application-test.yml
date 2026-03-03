@@ -1,0 +1,29 @@
+cors:
+  allowed-origins: http://localhost:5173
+
+spring:
+  datasource:
+    # Testcontainers auto-configures via @ServiceConnection
+    hikari:
+      maximum-pool-size: 5
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+
+  h2:
+    console:
+      enabled: false
+
+jwt:
+  secret: dGVzdC1zZWNyZXQta2V5LXRoYXQtaXMtbG9uZy1lbm91Z2gtZm9yLWhtYWMtc2hhLTI1Ng==
+  expiration: 86400000
+  issuer: family-hub-api-test
