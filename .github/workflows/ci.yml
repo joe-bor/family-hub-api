@@ -23,7 +23,7 @@ jobs:
       - name: Build and test
         run: ./mvnw verify
         env:
-          JWT_SECRET: dGVzdC1zZWNyZXQta2V5LXRoYXQtaXMtbG9uZy1lbm91Z2gtZm9yLWhtYWMtc2hhLTI1Ng==
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_EXPIRATION: 86400000
           JWT_ISSUER: family-hub-api-test
 
