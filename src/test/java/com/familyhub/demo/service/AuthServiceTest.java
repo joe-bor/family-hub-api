@@ -54,7 +54,7 @@ class AuthServiceTest {
         RegisterRequest request = createRegisterRequest();
         when(familyRepository.existsByUsername(request.username())).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
-        when(familyRepository.save(any(Family.class))).thenReturn(family);
+        when(familyRepository.saveAndFlush(any(Family.class))).thenReturn(family);
         when(jwtService.generateToken(family)).thenReturn("jwt-token");
 
         AuthResponse result = authService.register(request);
