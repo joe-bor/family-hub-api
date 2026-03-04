@@ -41,6 +41,25 @@ class FamilyServiceTest {
     }
 
     @Test
+    void findFamilyResponse_found_returnsResponse() {
+        when(familyRepository.findById(FAMILY_ID)).thenReturn(Optional.of(family));
+
+        FamilyResponse result = familyService.findFamilyResponse(FAMILY_ID);
+
+        assertThat(result.id()).isEqualTo(FAMILY_ID);
+        assertThat(result.name()).isEqualTo("Test Family");
+    }
+
+    @Test
+    void findFamilyResponse_notFound_throws() {
+        UUID unknownId = UUID.randomUUID();
+        when(familyRepository.findById(unknownId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> familyService.findFamilyResponse(unknownId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void updateFamily_nameOnly_updatesName() {
         FamilyRequest request = new FamilyRequest("New Name", null);
         when(familyRepository.findById(FAMILY_ID)).thenReturn(Optional.of(family));
