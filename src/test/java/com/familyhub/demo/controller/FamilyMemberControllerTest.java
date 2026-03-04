@@ -20,8 +20,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
-import java.util.UUID;
 
+import static com.familyhub.demo.TestDataFactory.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -45,8 +45,6 @@ class FamilyMemberControllerTest {
 
     @MockitoBean
     FamilyMemberService familyMemberService;
-
-    private static final UUID MEMBER_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
     private FamilyMemberResponse sampleMemberResponse() {
         return new FamilyMemberResponse(MEMBER_ID, "Mom", FamilyColor.CORAL, "mom@test.com", null);

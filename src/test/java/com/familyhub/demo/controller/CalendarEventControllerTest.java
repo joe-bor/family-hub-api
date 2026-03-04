@@ -20,8 +20,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
+import static com.familyhub.demo.TestDataFactory.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -46,9 +46,6 @@ class CalendarEventControllerTest {
 
     @MockitoBean
     CalendarEventService calendarEventService;
-
-    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000003");
-    private static final UUID MEMBER_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
     private CalendarEventResponse sampleEventResponse() {
         return CalendarEventResponse.builder()
