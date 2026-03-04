@@ -39,7 +39,7 @@ public class AuthService {
                         .map(request -> FamilyMemberMapper.toEntity(request, family))
                         .toList()
         );
-        Family saved = familyRepository.save(family);
+        Family saved = familyRepository.saveAndFlush(family);
 
         // Create JWT and return response
         String token = jwtService.generateToken(saved);
