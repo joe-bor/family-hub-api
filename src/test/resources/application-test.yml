@@ -24,6 +24,6 @@ spring:
       enabled: false
 
 jwt:
-  secret: dGVzdC1zZWNyZXQta2V5LXRoYXQtaXMtbG9uZy1lbm91Z2gtZm9yLWhtYWMtc2hhLTI1Ng==
-  expiration: 86400000
-  issuer: family-hub-api-test
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:86400000}
+  issuer: ${JWT_ISSUER:family-hub-api-test}
