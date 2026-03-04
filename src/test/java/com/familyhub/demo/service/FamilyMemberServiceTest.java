@@ -91,9 +91,10 @@ class FamilyMemberServiceTest {
         FamilyMemberRequest request = createFamilyMemberRequest();
         when(familyMemberRepository.save(any(FamilyMember.class))).thenReturn(member);
 
-        FamilyMember result = familyMemberService.addFamilyMember(family, request);
+        FamilyMemberResponse result = familyMemberService.addFamilyMember(family, request);
 
-        assertThat(result.getName()).isEqualTo("Test Member");
+        assertThat(result.id()).isEqualTo(MEMBER_ID);
+        assertThat(result.name()).isEqualTo("Test Member");
         verify(familyMemberRepository).save(any(FamilyMember.class));
     }
 
@@ -103,9 +104,10 @@ class FamilyMemberServiceTest {
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
         when(familyMemberRepository.save(any(FamilyMember.class))).thenReturn(member);
 
-        FamilyMember result = familyMemberService.updateFamilyMember(family, MEMBER_ID, request);
+        FamilyMemberResponse result = familyMemberService.updateFamilyMember(family, MEMBER_ID, request);
 
-        assertThat(result).isNotNull();
+        assertThat(result.id()).isEqualTo(MEMBER_ID);
+        assertThat(result.name()).isEqualTo("Test Member");
         verify(familyMemberRepository).save(any(FamilyMember.class));
     }
 

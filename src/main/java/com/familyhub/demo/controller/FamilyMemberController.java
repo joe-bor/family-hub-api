@@ -3,9 +3,7 @@ package com.familyhub.demo.controller;
 import com.familyhub.demo.dto.ApiResponse;
 import com.familyhub.demo.dto.FamilyMemberRequest;
 import com.familyhub.demo.dto.FamilyMemberResponse;
-import com.familyhub.demo.mapper.FamilyMemberMapper;
 import com.familyhub.demo.model.Family;
-import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.service.FamilyMemberService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -44,11 +42,11 @@ public class FamilyMemberController {
             @AuthenticationPrincipal Family family,
             @Valid @RequestBody FamilyMemberRequest request) {
 
-        FamilyMember familyMember = familyMemberService.addFamilyMember(family, request);
-        URI location =  URI.create("/api/family/members/" + familyMember.getId());
+        FamilyMemberResponse response = familyMemberService.addFamilyMember(family, request);
+        URI location = URI.create("/api/family/members/" + response.id());
 
         return ResponseEntity.created(location).body(
-                new ApiResponse<>(FamilyMemberMapper.toDto(familyMember), "Family Member Added")
+                new ApiResponse<>(response, "Family Member Added")
         );
     }
 
@@ -58,8 +56,8 @@ public class FamilyMemberController {
             @Valid @RequestBody FamilyMemberRequest familyMemberRequest,
             @PathVariable UUID id
     ) {
-        FamilyMember familyMember = familyMemberService.updateFamilyMember(family, id, familyMemberRequest);
-        return ResponseEntity.ok(new ApiResponse<>(FamilyMemberMapper.toDto(familyMember), "Family Member Updated"));
+        FamilyMemberResponse response = familyMemberService.updateFamilyMember(family, id, familyMemberRequest);
+        return ResponseEntity.ok(new ApiResponse<>(response, "Family Member Updated"));
     }
 
     @DeleteMapping("/{id}")
