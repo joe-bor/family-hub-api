@@ -22,8 +22,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
+import static com.familyhub.demo.TestDataFactory.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -47,8 +47,6 @@ class AuthControllerTest {
 
     @MockitoBean
     AuthService authService;
-
-    private static final UUID FAMILY_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     private AuthResponse sampleAuthResponse() {
         return new AuthResponse("jwt-token", new FamilyResponse(

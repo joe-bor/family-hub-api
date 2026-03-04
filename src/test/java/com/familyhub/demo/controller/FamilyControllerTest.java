@@ -20,8 +20,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
+import static com.familyhub.demo.TestDataFactory.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -44,14 +44,12 @@ class FamilyControllerTest {
     @MockitoBean
     FamilyService familyService;
 
-    private static final UUID FAMILY_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-
     private FamilyResponse sampleFamilyResponse() {
         return new FamilyResponse(
                 FAMILY_ID,
                 "Test Family",
                 List.of(new FamilyMemberResponse(
-                        UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                        MEMBER_ID,
                         "Mom", FamilyColor.CORAL, "mom@test.com", null
                 )),
                 LocalDateTime.of(2025, 1, 1, 0, 0)
