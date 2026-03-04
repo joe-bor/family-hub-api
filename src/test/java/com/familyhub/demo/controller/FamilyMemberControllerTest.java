@@ -4,7 +4,6 @@ import com.familyhub.demo.config.SecurityConfig;
 import com.familyhub.demo.dto.FamilyMemberResponse;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyColor;
-import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.security.JwtAuthenticationEntryPoint;
 import com.familyhub.demo.security.JwtAuthenticationFilter;
 import com.familyhub.demo.security.WithMockFamily;
@@ -53,18 +52,6 @@ class FamilyMemberControllerTest {
         return new FamilyMemberResponse(MEMBER_ID, "Mom", FamilyColor.CORAL, "mom@test.com", null);
     }
 
-    private FamilyMember sampleMemberEntity() {
-        FamilyMember member = new FamilyMember();
-        member.setId(MEMBER_ID);
-        member.setName("Mom");
-        member.setColor(FamilyColor.CORAL);
-        member.setEmail("mom@test.com");
-        Family family = new Family();
-        family.setId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
-        member.setFamily(family);
-        return member;
-    }
-
     private static final String MEMBER_JSON = """
             {"name": "Mom", "color": "coral"}
             """;
@@ -97,7 +84,7 @@ class FamilyMemberControllerTest {
     @WithMockFamily
     void addMember_returns201WithLocationHeader() throws Exception {
         given(familyMemberService.addFamilyMember(any(Family.class), any()))
-                .willReturn(sampleMemberEntity());
+                .willReturn(sampleMemberResponse());
 
         mockMvc.perform(post("/api/family/members")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -112,7 +99,7 @@ class FamilyMemberControllerTest {
     @WithMockFamily
     void updateMember_returns200() throws Exception {
         given(familyMemberService.updateFamilyMember(any(Family.class), eq(MEMBER_ID), any()))
-                .willReturn(sampleMemberEntity());
+                .willReturn(sampleMemberResponse());
 
         mockMvc.perform(put("/api/family/members/{id}", MEMBER_ID)
                         .contentType(MediaType.APPLICATION_JSON)

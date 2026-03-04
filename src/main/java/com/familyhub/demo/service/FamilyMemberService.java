@@ -38,12 +38,13 @@ public class FamilyMemberService {
     }
 
     @Transactional
-    public FamilyMember addFamilyMember(Family family, FamilyMemberRequest toAdd) {
-        return familyMemberRepository.save(FamilyMemberMapper.toEntity(toAdd, family));
+    public FamilyMemberResponse addFamilyMember(Family family, FamilyMemberRequest toAdd) {
+        FamilyMember saved = familyMemberRepository.save(FamilyMemberMapper.toEntity(toAdd, family));
+        return FamilyMemberMapper.toDto(saved);
     }
 
     @Transactional
-    public FamilyMember updateFamilyMember(
+    public FamilyMemberResponse updateFamilyMember(
             Family family,
             UUID familyMemberId,
             FamilyMemberRequest update) {
@@ -63,7 +64,8 @@ public class FamilyMemberService {
         toBeUpdated.setEmail(update.email());
 
         // Save
-        return familyMemberRepository.save(toBeUpdated);
+        FamilyMember saved = familyMemberRepository.save(toBeUpdated);
+        return FamilyMemberMapper.toDto(saved);
     }
 
     @Transactional
