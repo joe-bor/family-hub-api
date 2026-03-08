@@ -36,6 +36,8 @@ public class CalendarEvent {
     @JoinColumn(name = "family_id", nullable = false)
     private Family family;
 
+    private LocalDate endDate;
+
     private boolean isAllDay;
 
     private String location;

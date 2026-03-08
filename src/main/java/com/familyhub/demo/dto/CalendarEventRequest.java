@@ -34,7 +34,11 @@ public record CalendarEventRequest(
 
         // optional
         @Size(max = 255)
-        String location
+        String location,
+
+        // optional — only valid for all-day events
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        LocalDate endDate
 ) {
 
 }

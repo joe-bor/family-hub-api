@@ -114,6 +114,7 @@ public class CalendarEventService {
         calendarEvent.setDate(update.getDate());
         calendarEvent.setAllDay(update.isAllDay());
         calendarEvent.setLocation(update.getLocation());
+        calendarEvent.setEndDate(update.getEndDate());
         calendarEvent.setMember(update.getMember());
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);

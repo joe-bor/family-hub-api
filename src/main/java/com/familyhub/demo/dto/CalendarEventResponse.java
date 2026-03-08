@@ -16,7 +16,9 @@ public record CalendarEventResponse(
         LocalDate date,
         UUID memberId,
         boolean isAllDay,
-        String location
+        String location,
+        @JsonFormat(pattern = "yyyy-MM-dd")
+        LocalDate endDate
 ) {
 
 }

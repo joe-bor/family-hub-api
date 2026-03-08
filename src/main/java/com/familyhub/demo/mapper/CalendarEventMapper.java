@@ -29,6 +29,7 @@ public class CalendarEventMapper {
         calendarEvent.setFamily(family);
         calendarEvent.setAllDay(request.isAllDay() != null && request.isAllDay());
         calendarEvent.setLocation(request.location());
+        calendarEvent.setEndDate(request.endDate());
 
         return  calendarEvent;
     }
@@ -43,6 +44,7 @@ public class CalendarEventMapper {
                 .memberId(calendarEvent.getMember().getId())
                 .isAllDay(calendarEvent.isAllDay())
                 .location(calendarEvent.getLocation())
+                .endDate(calendarEvent.getEndDate())
                 .build();
     }
 
