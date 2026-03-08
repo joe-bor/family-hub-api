@@ -299,6 +299,55 @@ class CalendarEventServiceTest {
     }
 
     @Test
+    void getAllEventsByFamily_startDateOnly_includesMultiDayEventEndingAfter() {
+        // Event is Mar 7–9, query startDate=Mar 8 → event ends Mar 9 which is >= Mar 8
+        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
+        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 3, 8), null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().title()).isEqualTo("Vacation");
+    }
+
+    @Test
+    void getAllEventsByFamily_startDateOnly_excludesMultiDayEventEndingBefore() {
+        // Event is Mar 7–9, query startDate=Mar 10 → event ends Mar 9 which is before Mar 10
+        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
+        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 3, 10), null, null);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void getAllEventsByFamily_endDateOnly_includesMultiDayEventStartingBefore() {
+        // Event is Mar 7–9, query endDate=Mar 8 → event starts Mar 7 which is <= Mar 8
+        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
+        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, null, LocalDate.of(2025, 3, 8), null);
+
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void getAllEventsByFamily_endDateOnly_excludesMultiDayEventStartingAfter() {
+        // Event is Mar 7–9, query endDate=Mar 6 → event starts Mar 7 which is after Mar 6
+        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
+        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, null, LocalDate.of(2025, 3, 6), null);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void deleteCalendarEvent_notFound_throws() {
         UUID unknownId = UUID.randomUUID();
         when(calendarEventRepository.findByFamilyAndId(family, unknownId)).thenReturn(Optional.empty());
