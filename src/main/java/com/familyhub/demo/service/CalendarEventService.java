@@ -37,8 +37,6 @@ public class CalendarEventService {
         Stream<CalendarEvent> calendarEventStream = calendarEventRepository.findByFamily(family).stream();
 
         Predicate<CalendarEvent> byMemberId = event -> event.getMember().getId().equals(memberId);
-        Predicate<CalendarEvent> byStartDateInclusive = event -> !event.getDate().isBefore(startDate); // is it "on or after"
-        Predicate<CalendarEvent> byEndDateInclusive = event -> !event.getDate().isAfter(endDate);
 
         if (memberId != null) {
             // Validate memberId passed belongs to logged in Family
@@ -51,12 +49,20 @@ public class CalendarEventService {
             calendarEventStream = calendarEventStream.filter(byMemberId);
         }
 
-        if (startDate != null) {
-            calendarEventStream = calendarEventStream.filter(byStartDateInclusive);
-        }
-
-        if (endDate != null) {
-            calendarEventStream = calendarEventStream.filter(byEndDateInclusive);
+        if (startDate != null && endDate != null) {
+            // Range-overlap: event.date <= rangeEnd AND coalesce(event.endDate, event.date) >= rangeStart
+            LocalDate rangeStart = startDate;
+            LocalDate rangeEnd = endDate;
+            Predicate<CalendarEvent> byDateRange = event -> {
+                LocalDate eventStart = event.getDate();
+                LocalDate eventEnd = event.getEndDate() != null ? event.getEndDate() : event.getDate();
+                return !eventStart.isAfter(rangeEnd) && !eventEnd.isBefore(rangeStart);
+            };
+            calendarEventStream = calendarEventStream.filter(byDateRange);
+        } else if (startDate != null) {
+            calendarEventStream = calendarEventStream.filter(event -> !event.getDate().isBefore(startDate));
+        } else if (endDate != null) {
+            calendarEventStream = calendarEventStream.filter(event -> !event.getDate().isAfter(endDate));
         }
 
         return calendarEventStream
