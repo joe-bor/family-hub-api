@@ -102,8 +102,36 @@ public final class TestDataFactory {
                 LocalDate.of(2025, 6, 15),
                 memberId,
                 false,
-                "Test Location"
+                "Test Location",
+                null
         );
+    }
+
+    public static CalendarEventRequest createMultiDayCalendarEventRequest(UUID memberId) {
+        return new CalendarEventRequest(
+                "Vacation",
+                "12:00 AM",
+                "12:00 AM",
+                LocalDate.of(2025, 3, 7),
+                memberId,
+                true,
+                null,
+                LocalDate.of(2025, 3, 9)
+        );
+    }
+
+    public static CalendarEvent createMultiDayCalendarEvent(Family family, FamilyMember member) {
+        CalendarEvent event = new CalendarEvent();
+        event.setId(UUID.randomUUID());
+        event.setTitle("Vacation");
+        event.setStartTime(LocalTime.MIDNIGHT);
+        event.setEndTime(LocalTime.MIDNIGHT);
+        event.setDate(LocalDate.of(2025, 3, 7));
+        event.setEndDate(LocalDate.of(2025, 3, 9));
+        event.setFamily(family);
+        event.setMember(member);
+        event.setAllDay(true);
+        return event;
     }
 
     public static FamilyRequest createFamilyRequest() {
@@ -149,6 +177,7 @@ public final class TestDataFactory {
                 .memberId(MEMBER_ID)
                 .isAllDay(false)
                 .location("Test Location")
+                .endDate(null)
                 .build();
     }
 }

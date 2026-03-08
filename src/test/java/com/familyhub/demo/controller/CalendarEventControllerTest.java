@@ -57,6 +57,7 @@ class CalendarEventControllerTest {
                 .memberId(MEMBER_ID)
                 .isAllDay(false)
                 .location("Test Location")
+                .endDate(null)
                 .build();
     }
 
