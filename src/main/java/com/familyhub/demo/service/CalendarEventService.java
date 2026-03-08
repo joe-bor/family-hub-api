@@ -83,6 +83,7 @@ public class CalendarEventService {
         // We turn DTO to an Entity so we can save it in our DB
         CalendarEvent calendarEvent = CalendarEventMapper.toEntity(request, family, familyMember);
         isEventTimeRangeValid(calendarEvent);
+        validateEndDate(calendarEvent);
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
 
@@ -106,6 +107,7 @@ public class CalendarEventService {
         // Map DTO to Entity to handle `string <-> date/time` conversions
         CalendarEvent update = CalendarEventMapper.toEntity(request, family, familyMember);
         isEventTimeRangeValid(update);
+        validateEndDate(update);
 
         // Apply changes
         calendarEvent.setTitle(update.getTitle());
@@ -134,6 +136,22 @@ public class CalendarEventService {
         //  an "all day event" should not be constrained by this check. (eg. Birthday 12 AM - 12 AM)
         if (!event.isAllDay() && event.getStartTime().isAfter(event.getEndTime())) {
             throw new BadRequestException("Start time must be before end time");
+        }
+    }
+
+    private void validateEndDate(CalendarEvent event) {
+        if (event.getEndDate() == null) {
+            return;
+        }
+        if (!event.isAllDay()) {
+            throw new BadRequestException("End date is only valid for all-day events");
+        }
+        if (event.getEndDate().isBefore(event.getDate())) {
+            throw new BadRequestException("End date must be on or after start date");
+        }
+        // Normalize: endDate == date means single-day, store as null
+        if (event.getEndDate().equals(event.getDate())) {
+            event.setEndDate(null);
         }
     }
 }
