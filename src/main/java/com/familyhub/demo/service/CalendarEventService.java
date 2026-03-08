@@ -60,8 +60,13 @@ public class CalendarEventService {
             };
             calendarEventStream = calendarEventStream.filter(byDateRange);
         } else if (startDate != null) {
-            calendarEventStream = calendarEventStream.filter(event -> !event.getDate().isBefore(startDate));
+            // Event is relevant if it ends on or after startDate
+            calendarEventStream = calendarEventStream.filter(event -> {
+                LocalDate eventEnd = event.getEndDate() != null ? event.getEndDate() : event.getDate();
+                return !eventEnd.isBefore(startDate);
+            });
         } else if (endDate != null) {
+            // Event is relevant if it starts on or before endDate
             calendarEventStream = calendarEventStream.filter(event -> !event.getDate().isAfter(endDate));
         }
 
