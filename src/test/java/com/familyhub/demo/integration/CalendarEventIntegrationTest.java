@@ -106,6 +106,90 @@ class CalendarEventIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    private String multiDayEventJson(String memberId) {
+        return """
+                {
+                    "title": "Vacation",
+                    "startTime": "12:00 AM",
+                    "endTime": "12:00 AM",
+                    "date": "2025-03-07",
+                    "memberId": "%s",
+                    "isAllDay": true,
+                    "endDate": "2025-03-09"
+                }
+                """.formatted(memberId);
+    }
+
+    @Test
+    void multiDayEventLifecycle() throws Exception {
+        // Create multi-day all-day event (Mar 7–9)
+        String createBody = mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(multiDayEventJson(memberId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.title").value("Vacation"))
+                .andExpect(jsonPath("$.data.endDate").value("2025-03-09"))
+                .andExpect(jsonPath("$.data.isAllDay").value(true))
+                .andReturn().getResponse().getContentAsString();
+
+        String eventId = JsonPath.read(createBody, "$.data.id");
+
+        // Query middle day (Mar 8) — event should be found via overlap
+        mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-03-08")
+                        .param("endDate", "2025-03-08"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '%s')]".formatted(eventId)).exists());
+
+        // Query outside range (Mar 10–15) — event should NOT be found
+        mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-03-10")
+                        .param("endDate", "2025-03-15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == '%s')]".formatted(eventId)).doesNotExist());
+    }
+
+    @Test
+    void rejectEndDateWithoutAllDay() throws Exception {
+        mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "Bad Event",
+                                    "startTime": "9:00 AM",
+                                    "endTime": "10:00 AM",
+                                    "date": "2025-03-07",
+                                    "memberId": "%s",
+                                    "isAllDay": false,
+                                    "endDate": "2025-03-09"
+                                }
+                                """.formatted(memberId)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectEndDateBeforeStartDate() throws Exception {
+        mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "Bad Event",
+                                    "startTime": "12:00 AM",
+                                    "endTime": "12:00 AM",
+                                    "date": "2025-03-09",
+                                    "memberId": "%s",
+                                    "isAllDay": true,
+                                    "endDate": "2025-03-07"
+                                }
+                                """.formatted(memberId)))
+                .andExpect(status().isBadRequest());
+    }
+
     @Test
     void crossFamilyAccess_denied() throws Exception {
         // Family A creates an event

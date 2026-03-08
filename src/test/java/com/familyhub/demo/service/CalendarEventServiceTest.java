@@ -147,7 +147,7 @@ class CalendarEventServiceTest {
     void addCalendarEvent_invalidTimeRange_throwsBadRequest() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Bad Event", "10:00 AM", "9:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null);
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
@@ -159,7 +159,7 @@ class CalendarEventServiceTest {
     void addCalendarEvent_allDayEvent_skipsTimeValidation() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Birthday", "12:00 AM", "12:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, true, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, true, null, null);
 
         CalendarEvent allDayEvent = createCalendarEvent(family, member);
         allDayEvent.setAllDay(true);
@@ -207,6 +207,95 @@ class CalendarEventServiceTest {
         calendarEventService.deleteCalendarEvent(EVENT_ID, family);
 
         verify(calendarEventRepository).delete(event);
+    }
+
+    @Test
+    void addCalendarEvent_multiDayAllDay_success() {
+        CalendarEventRequest request = createMultiDayCalendarEventRequest(MEMBER_ID);
+        CalendarEvent multiDayEvent = createMultiDayCalendarEvent(family, member);
+
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(calendarEventRepository.save(any(CalendarEvent.class))).thenReturn(multiDayEvent);
+
+        CalendarEventResponse result = calendarEventService.addCalendarEvent(request, family);
+
+        assertThat(result.isAllDay()).isTrue();
+        assertThat(result.endDate()).isEqualTo(LocalDate.of(2025, 3, 9));
+    }
+
+    @Test
+    void addCalendarEvent_endDateWithoutAllDay_throwsBadRequest() {
+        CalendarEventRequest request = new CalendarEventRequest(
+                "Trip", "9:00 AM", "10:00 AM",
+                LocalDate.of(2025, 3, 7), MEMBER_ID, false, null,
+                LocalDate.of(2025, 3, 9));
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("End date is only valid for all-day events");
+    }
+
+    @Test
+    void addCalendarEvent_endDateBeforeDate_throwsBadRequest() {
+        CalendarEventRequest request = new CalendarEventRequest(
+                "Trip", "12:00 AM", "12:00 AM",
+                LocalDate.of(2025, 3, 9), MEMBER_ID, true, null,
+                LocalDate.of(2025, 3, 7));
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("End date must be on or after start date");
+    }
+
+    @Test
+    void addCalendarEvent_endDateEqualsDate_normalizesToNull() {
+        CalendarEventRequest request = new CalendarEventRequest(
+                "Birthday", "12:00 AM", "12:00 AM",
+                LocalDate.of(2025, 3, 7), MEMBER_ID, true, null,
+                LocalDate.of(2025, 3, 7));
+
+        CalendarEvent savedEvent = createCalendarEvent(family, member);
+        savedEvent.setAllDay(true);
+        savedEvent.setDate(LocalDate.of(2025, 3, 7));
+        savedEvent.setEndDate(null);
+
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(calendarEventRepository.save(any(CalendarEvent.class))).thenAnswer(invocation -> {
+            CalendarEvent arg = invocation.getArgument(0);
+            assertThat(arg.getEndDate()).isNull();
+            return savedEvent;
+        });
+
+        calendarEventService.addCalendarEvent(request, family);
+
+        verify(calendarEventRepository).save(any(CalendarEvent.class));
+    }
+
+    @Test
+    void getAllEventsByFamily_multiDayEvent_overlapsDateRange() {
+        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
+        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
+
+        // Query Mar 8–8, event is Mar 7–9 → should overlap
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 3, 8), LocalDate.of(2025, 3, 8), null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().title()).isEqualTo("Vacation");
+    }
+
+    @Test
+    void getAllEventsByFamily_multiDayEvent_outsideDateRange() {
+        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
+        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
+
+        // Query Mar 10–15, event is Mar 7–9 → should not overlap
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 3, 10), LocalDate.of(2025, 3, 15), null);
+
+        assertThat(result).isEmpty();
     }
 
     @Test
