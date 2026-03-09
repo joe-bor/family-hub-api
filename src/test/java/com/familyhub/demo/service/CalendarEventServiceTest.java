@@ -491,4 +491,124 @@ class CalendarEventServiceTest {
         assertThatThrownBy(() -> calendarEventService.deleteCalendarEvent(unknownId, family))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    // --- Instance edit/delete tests ---
+
+    @Test
+    void editRecurringInstance_createsException() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        LocalDate instanceDate = LocalDate.of(2025, 6, 5);
+        CalendarEventRequest request = new CalendarEventRequest(
+                "Edited Preschool", "10:00 AM", "1:00 PM",
+                instanceDate, MEMBER_ID, false, "New Location", null, null);
+
+        when(calendarEventRepository.findByFamilyAndId(family, parent.getId())).thenReturn(Optional.of(parent));
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(calendarEventRepository.findByRecurringEventAndOriginalDate(parent, instanceDate))
+                .thenReturn(Optional.empty());
+        when(calendarEventRepository.save(any(CalendarEvent.class))).thenAnswer(invocation -> {
+            CalendarEvent saved = invocation.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            return saved;
+        });
+
+        CalendarEventResponse result = calendarEventService.editRecurringInstance(
+                parent.getId(), instanceDate, request, family);
+
+        assertThat(result.title()).isEqualTo("Edited Preschool");
+        verify(calendarEventRepository).save(any(CalendarEvent.class));
+    }
+
+    @Test
+    void editRecurringInstance_updatesExistingException() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        LocalDate instanceDate = LocalDate.of(2025, 6, 5);
+
+        CalendarEvent existingException = new CalendarEvent();
+        existingException.setId(UUID.randomUUID());
+        existingException.setRecurringEvent(parent);
+        existingException.setOriginalDate(instanceDate);
+        existingException.setFamily(family);
+        existingException.setMember(member);
+        existingException.setTitle("Old Title");
+        existingException.setStartTime(LocalTime.of(9, 0));
+        existingException.setEndTime(LocalTime.of(12, 0));
+        existingException.setDate(instanceDate);
+
+        CalendarEventRequest request = new CalendarEventRequest(
+                "Updated Title", "10:00 AM", "1:00 PM",
+                instanceDate, MEMBER_ID, false, null, null, null);
+
+        when(calendarEventRepository.findByFamilyAndId(family, parent.getId())).thenReturn(Optional.of(parent));
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(calendarEventRepository.findByRecurringEventAndOriginalDate(parent, instanceDate))
+                .thenReturn(Optional.of(existingException));
+        when(calendarEventRepository.save(any(CalendarEvent.class))).thenReturn(existingException);
+
+        CalendarEventResponse result = calendarEventService.editRecurringInstance(
+                parent.getId(), instanceDate, request, family);
+
+        assertThat(result).isNotNull();
+        verify(calendarEventRepository).save(existingException);
+    }
+
+    @Test
+    void editRecurringInstance_nonRecurring_throwsBadRequest() {
+        // event has no recurrenceRule
+        when(calendarEventRepository.findByFamilyAndId(family, EVENT_ID)).thenReturn(Optional.of(event));
+
+        CalendarEventRequest request = createCalendarEventRequest(MEMBER_ID);
+
+        assertThatThrownBy(() -> calendarEventService.editRecurringInstance(
+                EVENT_ID, LocalDate.of(2025, 6, 15), request, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Event is not recurring");
+    }
+
+    @Test
+    void deleteRecurringInstance_createsCancelledRow() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        LocalDate instanceDate = LocalDate.of(2025, 6, 5);
+
+        when(calendarEventRepository.findByFamilyAndId(family, parent.getId())).thenReturn(Optional.of(parent));
+        when(calendarEventRepository.findByRecurringEventAndOriginalDate(parent, instanceDate))
+                .thenReturn(Optional.empty());
+        when(calendarEventRepository.save(any(CalendarEvent.class))).thenAnswer(invocation -> {
+            CalendarEvent saved = invocation.getArgument(0);
+            assertThat(saved.isCancelled()).isTrue();
+            return saved;
+        });
+
+        calendarEventService.deleteRecurringInstance(parent.getId(), instanceDate, family);
+
+        verify(calendarEventRepository).save(any(CalendarEvent.class));
+    }
+
+    @Test
+    void deleteRecurringInstance_cancelsExistingException() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        LocalDate instanceDate = LocalDate.of(2025, 6, 5);
+
+        CalendarEvent existingException = new CalendarEvent();
+        existingException.setId(UUID.randomUUID());
+        existingException.setRecurringEvent(parent);
+        existingException.setOriginalDate(instanceDate);
+        existingException.setFamily(family);
+        existingException.setMember(member);
+        existingException.setTitle("Edited");
+        existingException.setStartTime(LocalTime.of(10, 0));
+        existingException.setEndTime(LocalTime.of(13, 0));
+        existingException.setDate(instanceDate);
+        existingException.setCancelled(false);
+
+        when(calendarEventRepository.findByFamilyAndId(family, parent.getId())).thenReturn(Optional.of(parent));
+        when(calendarEventRepository.findByRecurringEventAndOriginalDate(parent, instanceDate))
+                .thenReturn(Optional.of(existingException));
+        when(calendarEventRepository.save(any(CalendarEvent.class))).thenReturn(existingException);
+
+        calendarEventService.deleteRecurringInstance(parent.getId(), instanceDate, family);
+
+        assertThat(existingException.isCancelled()).isTrue();
+        verify(calendarEventRepository).save(existingException);
+    }
 }

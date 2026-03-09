@@ -208,6 +208,28 @@ class CalendarEventControllerTest {
     }
 
     @Test
+    @WithMockFamily
+    void editRecurringInstance_returns200() throws Exception {
+        given(calendarEventService.editRecurringInstance(eq(EVENT_ID), eq(LocalDate.of(2025, 6, 5)), any(), any(Family.class)))
+                .willReturn(sampleEventResponse());
+
+        mockMvc.perform(put("/api/calendar/events/{parentId}/instances/{date}", EVENT_ID, "2025-06-05")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(EVENT_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Instance updated successfully"));
+    }
+
+    @Test
+    @WithMockFamily
+    void deleteRecurringInstance_returns204() throws Exception {
+        willDoNothing().given(calendarEventService).deleteRecurringInstance(eq(EVENT_ID), eq(LocalDate.of(2025, 6, 5)), any(Family.class));
+
+        mockMvc.perform(delete("/api/calendar/events/{parentId}/instances/{date}", EVENT_ID, "2025-06-05"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     void getEvents_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/calendar/events"))
                 .andExpect(status().isUnauthorized())

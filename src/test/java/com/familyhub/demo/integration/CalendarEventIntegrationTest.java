@@ -212,4 +212,98 @@ class CalendarEventIntegrationTest {
                         .header("Authorization", "Bearer " + familyBToken))
                 .andExpect(status().isNotFound());
     }
+
+    private String recurringEventJson(String memberId) {
+        return """
+                {
+                    "title": "Preschool",
+                    "startTime": "9:00 AM",
+                    "endTime": "12:00 PM",
+                    "date": "2025-06-03",
+                    "memberId": "%s",
+                    "isAllDay": false,
+                    "location": "School",
+                    "recurrenceRule": "FREQ=WEEKLY;BYDAY=TU,TH,FR"
+                }
+                """.formatted(memberId);
+    }
+
+    @Test
+    void recurringEventLifecycle() throws Exception {
+        // 1. Create recurring event
+        String createBody = mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(recurringEventJson(memberId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.title").value("Preschool"))
+                .andExpect(jsonPath("$.data.recurrenceRule").value("FREQ=WEEKLY;BYDAY=TU,TH,FR"))
+                .andExpect(jsonPath("$.data.isRecurring").value(true))
+                .andReturn().getResponse().getContentAsString();
+
+        String parentId = JsonPath.read(createBody, "$.data.id");
+
+        // 2. GET expanded — query Jun 1–8 should return instances: Tue 3, Thu 5, Fri 6
+        String getBody = mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-06-01")
+                        .param("endDate", "2025-06-08"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andReturn().getResponse().getContentAsString();
+
+        // 3. Edit instance — change Thu Jun 5 title
+        String editJson = """
+                {
+                    "title": "Preschool (Field Trip)",
+                    "startTime": "9:00 AM",
+                    "endTime": "1:00 PM",
+                    "date": "2025-06-05",
+                    "memberId": "%s",
+                    "isAllDay": false,
+                    "location": "Zoo"
+                }
+                """.formatted(memberId);
+
+        mockMvc.perform(put("/api/calendar/events/{parentId}/instances/{date}", parentId, "2025-06-05")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(editJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("Preschool (Field Trip)"));
+
+        // 4. GET confirms edit — Thu 5 should show edited title
+        mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-06-01")
+                        .param("endDate", "2025-06-08"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[?(@.date == '2025-06-05')].title")
+                        .value("Preschool (Field Trip)"));
+
+        // 5. Delete instance — remove Fri Jun 6
+        mockMvc.perform(delete("/api/calendar/events/{parentId}/instances/{date}", parentId, "2025-06-06")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+
+        // 6. GET confirms exclusion — should now return 2 instances
+        mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-06-01")
+                        .param("endDate", "2025-06-08"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[?(@.date == '2025-06-06')]").doesNotExist());
+
+        // 7. Delete parent — should cascade and clean up exceptions
+        mockMvc.perform(delete("/api/calendar/events/{id}", parentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+
+        // Verify parent is gone
+        mockMvc.perform(get("/api/calendar/events/{id}", parentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+    }
 }
