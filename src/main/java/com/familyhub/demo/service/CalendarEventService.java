@@ -27,6 +27,7 @@ import java.util.stream.Stream;
 public class CalendarEventService {
     private final CalendarEventRepository calendarEventRepository;
     private final FamilyMemberRepository familyMemberRepository;
+    private final RecurrenceRuleValidator recurrenceRuleValidator;
 
     public List<CalendarEventResponse> getAllEventsByFamily(
             Family family,
@@ -95,6 +96,7 @@ public class CalendarEventService {
         CalendarEvent calendarEvent = CalendarEventMapper.toEntity(request, family, familyMember);
         isEventTimeRangeValid(calendarEvent);
         validateEndDate(calendarEvent);
+        validateRecurrenceRule(calendarEvent);
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
 
@@ -119,6 +121,7 @@ public class CalendarEventService {
         CalendarEvent update = CalendarEventMapper.toEntity(request, family, familyMember);
         isEventTimeRangeValid(update);
         validateEndDate(update);
+        validateRecurrenceRule(update);
 
         // Apply changes
         calendarEvent.setTitle(update.getTitle());
@@ -129,6 +132,7 @@ public class CalendarEventService {
         calendarEvent.setLocation(update.getLocation());
         calendarEvent.setEndDate(update.getEndDate());
         calendarEvent.setMember(update.getMember());
+        calendarEvent.setRecurrenceRule(update.getRecurrenceRule());
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
 
@@ -148,6 +152,16 @@ public class CalendarEventService {
         if (!event.isAllDay() && event.getStartTime().isAfter(event.getEndTime())) {
             throw new BadRequestException("Start time must be before end time");
         }
+    }
+
+    private void validateRecurrenceRule(CalendarEvent event) {
+        if (event.getRecurrenceRule() == null) {
+            return;
+        }
+        if (event.getEndDate() != null) {
+            throw new BadRequestException("Recurring events must not have an end date");
+        }
+        recurrenceRuleValidator.validate(event.getRecurrenceRule());
     }
 
     private void validateEndDate(CalendarEvent event) {

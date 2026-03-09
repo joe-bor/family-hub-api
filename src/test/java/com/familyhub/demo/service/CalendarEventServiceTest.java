@@ -38,6 +38,9 @@ class CalendarEventServiceTest {
     @Mock
     private FamilyMemberRepository familyMemberRepository;
 
+    @Mock
+    private RecurrenceRuleValidator recurrenceRuleValidator;
+
     @InjectMocks
     private CalendarEventService calendarEventService;
 
@@ -147,7 +150,7 @@ class CalendarEventServiceTest {
     void addCalendarEvent_invalidTimeRange_throwsBadRequest() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Bad Event", "10:00 AM", "9:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null, null);
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
@@ -159,7 +162,7 @@ class CalendarEventServiceTest {
     void addCalendarEvent_allDayEvent_skipsTimeValidation() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Birthday", "12:00 AM", "12:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, true, null, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, true, null, null, null);
 
         CalendarEvent allDayEvent = createCalendarEvent(family, member);
         allDayEvent.setAllDay(true);
@@ -228,7 +231,7 @@ class CalendarEventServiceTest {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Trip", "9:00 AM", "10:00 AM",
                 LocalDate.of(2025, 3, 7), MEMBER_ID, false, null,
-                LocalDate.of(2025, 3, 9));
+                LocalDate.of(2025, 3, 9), null);
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
@@ -241,7 +244,7 @@ class CalendarEventServiceTest {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Trip", "12:00 AM", "12:00 AM",
                 LocalDate.of(2025, 3, 9), MEMBER_ID, true, null,
-                LocalDate.of(2025, 3, 7));
+                LocalDate.of(2025, 3, 7), null);
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
@@ -254,7 +257,7 @@ class CalendarEventServiceTest {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Birthday", "12:00 AM", "12:00 AM",
                 LocalDate.of(2025, 3, 7), MEMBER_ID, true, null,
-                LocalDate.of(2025, 3, 7));
+                LocalDate.of(2025, 3, 7), null);
 
         CalendarEvent savedEvent = createCalendarEvent(family, member);
         savedEvent.setAllDay(true);
@@ -345,6 +348,34 @@ class CalendarEventServiceTest {
                 family, null, LocalDate.of(2025, 3, 6), null);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void addCalendarEvent_recurrenceRuleWithEndDate_throwsBadRequest() {
+        CalendarEventRequest request = new CalendarEventRequest(
+                "Dance", "9:00 AM", "10:00 AM",
+                LocalDate.of(2025, 6, 3), MEMBER_ID, true, null,
+                LocalDate.of(2025, 6, 10), "FREQ=WEEKLY;BYDAY=SU");
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Recurring events must not have an end date");
+    }
+
+    @Test
+    void addCalendarEvent_validRecurrenceRule_success() {
+        CalendarEventRequest request = createRecurringCalendarEventRequest(MEMBER_ID);
+        CalendarEvent recurringEvent = createRecurringCalendarEvent(family, member);
+
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(calendarEventRepository.save(any(CalendarEvent.class))).thenReturn(recurringEvent);
+
+        CalendarEventResponse result = calendarEventService.addCalendarEvent(request, family);
+
+        assertThat(result.recurrenceRule()).isEqualTo("FREQ=WEEKLY;BYDAY=TU,TH,FR");
+        assertThat(result.isRecurring()).isTrue();
+        verify(recurrenceRuleValidator).validate("FREQ=WEEKLY;BYDAY=TU,TH,FR");
     }
 
     @Test

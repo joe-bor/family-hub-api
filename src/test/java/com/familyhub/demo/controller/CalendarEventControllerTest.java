@@ -58,6 +58,9 @@ class CalendarEventControllerTest {
                 .isAllDay(false)
                 .location("Test Location")
                 .endDate(null)
+                .recurrenceRule(null)
+                .recurringEventId(null)
+                .isRecurring(false)
                 .build();
     }
 
