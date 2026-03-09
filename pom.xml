@@ -103,6 +103,13 @@
 			<artifactId>spring-boot-h2console</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+        <!-- iCal4j for RRULE parsing -->
+        <dependency>
+            <groupId>org.mnode.ical4j</groupId>
+            <artifactId>ical4j</artifactId>
+            <version>4.1.0</version>
+        </dependency>
+
         <!--  JWT Auth      -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
