@@ -196,6 +196,71 @@ public class CalendarEventService {
         calendarEventRepository.delete(calendarEvent);
     }
 
+    @Transactional
+    public CalendarEventResponse editRecurringInstance(UUID parentId, LocalDate date, CalendarEventRequest request, Family family) {
+        CalendarEvent parent = calendarEventRepository.findByFamilyAndId(family, parentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Calendar Event", parentId));
+        if (parent.getRecurrenceRule() == null) {
+            throw new BadRequestException("Event is not recurring");
+        }
+
+        FamilyMember familyMember = familyMemberRepository.findById(request.memberId())
+                .orElseThrow(() -> new ResourceNotFoundException("Family Member", request.memberId()));
+        if (!familyMember.getFamily().getId().equals(family.getId())) {
+            throw new AccessDeniedException("Access Denied -- CalendarEventService.editRecurringInstance()");
+        }
+
+        // Find or create exception row
+        CalendarEvent exception = calendarEventRepository.findByRecurringEventAndOriginalDate(parent, date)
+                .orElseGet(() -> {
+                    CalendarEvent ex = new CalendarEvent();
+                    ex.setRecurringEvent(parent);
+                    ex.setOriginalDate(date);
+                    ex.setFamily(family);
+                    return ex;
+                });
+
+        // Apply edits from request
+        CalendarEvent update = CalendarEventMapper.toEntity(request, family, familyMember);
+        exception.setTitle(update.getTitle());
+        exception.setStartTime(update.getStartTime());
+        exception.setEndTime(update.getEndTime());
+        exception.setDate(update.getDate());
+        exception.setAllDay(update.isAllDay());
+        exception.setLocation(update.getLocation());
+        exception.setMember(update.getMember());
+        exception.setCancelled(false);
+
+        CalendarEvent saved = calendarEventRepository.save(exception);
+        return CalendarEventMapper.toDto(saved);
+    }
+
+    @Transactional
+    public void deleteRecurringInstance(UUID parentId, LocalDate date, Family family) {
+        CalendarEvent parent = calendarEventRepository.findByFamilyAndId(family, parentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Calendar Event", parentId));
+        if (parent.getRecurrenceRule() == null) {
+            throw new BadRequestException("Event is not recurring");
+        }
+
+        CalendarEvent exception = calendarEventRepository.findByRecurringEventAndOriginalDate(parent, date)
+                .orElseGet(() -> {
+                    CalendarEvent ex = new CalendarEvent();
+                    ex.setRecurringEvent(parent);
+                    ex.setOriginalDate(date);
+                    ex.setFamily(family);
+                    ex.setTitle(parent.getTitle());
+                    ex.setStartTime(parent.getStartTime());
+                    ex.setEndTime(parent.getEndTime());
+                    ex.setDate(date);
+                    ex.setMember(parent.getMember());
+                    return ex;
+                });
+
+        exception.setCancelled(true);
+        calendarEventRepository.save(exception);
+    }
+
     private void isEventTimeRangeValid(CalendarEvent event) {
         //  an "all day event" should not be constrained by this check. (eg. Birthday 12 AM - 12 AM)
         if (!event.isAllDay() && event.getStartTime().isAfter(event.getEndTime())) {

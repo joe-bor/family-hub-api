@@ -7,6 +7,7 @@ import com.familyhub.demo.model.Family;
 import com.familyhub.demo.service.CalendarEventService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -75,6 +76,27 @@ public class CalendarEventController {
     ) {
         calendarEventService.deleteCalendarEvent(id, family);
 
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{parentId}/instances/{date}")
+    public ResponseEntity<ApiResponse<CalendarEventResponse>> editRecurringInstance(
+            @PathVariable UUID parentId,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @Valid @RequestBody CalendarEventRequest request,
+            @AuthenticationPrincipal Family family
+    ) {
+        CalendarEventResponse response = calendarEventService.editRecurringInstance(parentId, date, request, family);
+        return ResponseEntity.ok(new ApiResponse<>(response, "Instance updated successfully"));
+    }
+
+    @DeleteMapping("/{parentId}/instances/{date}")
+    public ResponseEntity<Void> deleteRecurringInstance(
+            @PathVariable UUID parentId,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @AuthenticationPrincipal Family family
+    ) {
+        calendarEventService.deleteRecurringInstance(parentId, date, family);
         return ResponseEntity.noContent().build();
     }
 }
