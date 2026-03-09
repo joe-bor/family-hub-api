@@ -27,6 +27,7 @@ import static com.familyhub.demo.TestDataFactory.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +41,9 @@ class CalendarEventServiceTest {
 
     @Mock
     private RecurrenceRuleValidator recurrenceRuleValidator;
+
+    @Mock
+    private RecurrenceExpander recurrenceExpander;
 
     @InjectMocks
     private CalendarEventService calendarEventService;
@@ -74,7 +78,8 @@ class CalendarEventServiceTest {
         outsideRange.setId(UUID.randomUUID());
         outsideRange.setDate(LocalDate.of(2025, 1, 1));
 
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(event, outsideRange));
+        when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(event, outsideRange));
+        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of());
 
         List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
                 family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 30), null);
@@ -279,7 +284,8 @@ class CalendarEventServiceTest {
     @Test
     void getAllEventsByFamily_multiDayEvent_overlapsDateRange() {
         CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
+        when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(multiDay));
+        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of());
 
         // Query Mar 8–8, event is Mar 7–9 → should overlap
         List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
@@ -292,7 +298,8 @@ class CalendarEventServiceTest {
     @Test
     void getAllEventsByFamily_multiDayEvent_outsideDateRange() {
         CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
+        when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(multiDay));
+        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of());
 
         // Query Mar 10–15, event is Mar 7–9 → should not overlap
         List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
@@ -348,6 +355,104 @@ class CalendarEventServiceTest {
                 family, null, LocalDate.of(2025, 3, 6), null);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void getAllEventsByFamily_withDateRange_expandsRecurringParents() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+
+        when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of());
+        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of(parent));
+        when(calendarEventRepository.findExceptionsByParentIds(List.of(parent.getId()))).thenReturn(List.of());
+
+        CalendarEventResponse instance1 = CalendarEventResponse.builder()
+                .id(parent.getId()).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
+                .date(LocalDate.of(2025, 6, 3)).memberId(MEMBER_ID).isRecurring(true)
+                .recurrenceRule("FREQ=WEEKLY;BYDAY=TU,TH,FR").build();
+        CalendarEventResponse instance2 = CalendarEventResponse.builder()
+                .id(parent.getId()).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
+                .date(LocalDate.of(2025, 6, 5)).memberId(MEMBER_ID).isRecurring(true)
+                .recurrenceRule("FREQ=WEEKLY;BYDAY=TU,TH,FR").build();
+
+        when(recurrenceExpander.expand(eq(parent), any(), any(), any()))
+                .thenReturn(List.of(instance1, instance2));
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 8), null);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(CalendarEventResponse::title).containsOnly("Preschool");
+        verify(recurrenceExpander).expand(eq(parent), any(), any(), any());
+    }
+
+    @Test
+    void getAllEventsByFamily_withDateRange_mergesRegularAndExpanded() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        CalendarEvent regular = createCalendarEvent(family, member);
+        regular.setDate(LocalDate.of(2025, 6, 4));
+
+        when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(regular));
+        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of(parent));
+        when(calendarEventRepository.findExceptionsByParentIds(List.of(parent.getId()))).thenReturn(List.of());
+
+        CalendarEventResponse expandedInstance = CalendarEventResponse.builder()
+                .id(parent.getId()).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
+                .date(LocalDate.of(2025, 6, 3)).memberId(MEMBER_ID).isRecurring(true).build();
+
+        when(recurrenceExpander.expand(eq(parent), any(), any(), any()))
+                .thenReturn(List.of(expandedInstance));
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 30), null);
+
+        assertThat(result).hasSize(2);
+        // Should be sorted by date
+        assertThat(result.get(0).date()).isEqualTo(LocalDate.of(2025, 6, 3));
+        assertThat(result.get(1).date()).isEqualTo(LocalDate.of(2025, 6, 4));
+    }
+
+    @Test
+    void getAllEventsByFamily_withDateRange_filtersMemberBeforeExpansion() {
+        FamilyMember otherMember = createFamilyMember(family);
+        UUID otherMemberId = UUID.randomUUID();
+        otherMember.setId(otherMemberId);
+
+        CalendarEvent parentForOther = createRecurringCalendarEvent(family, otherMember);
+        CalendarEvent parentForMember = createRecurringCalendarEvent(family, member);
+
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of());
+        when(calendarEventRepository.findRecurringParentsByFamily(family))
+                .thenReturn(List.of(parentForOther, parentForMember));
+        when(calendarEventRepository.findExceptionsByParentIds(List.of(parentForMember.getId())))
+                .thenReturn(List.of());
+
+        CalendarEventResponse instance = CalendarEventResponse.builder()
+                .id(parentForMember.getId()).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
+                .date(LocalDate.of(2025, 6, 3)).memberId(MEMBER_ID).isRecurring(true).build();
+
+        when(recurrenceExpander.expand(eq(parentForMember), any(), any(), any()))
+                .thenReturn(List.of(instance));
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 8), MEMBER_ID);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().memberId()).isEqualTo(MEMBER_ID);
+        // Should NOT have expanded parentForOther
+        verify(recurrenceExpander, never()).expand(eq(parentForOther), any(), any(), any());
+    }
+
+    @Test
+    void getAllEventsByFamily_noDateRange_returnsParentsAsIs() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(event, parent));
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, null, null, null);
+
+        assertThat(result).hasSize(2);
+        verifyNoInteractions(recurrenceExpander);
     }
 
     @Test

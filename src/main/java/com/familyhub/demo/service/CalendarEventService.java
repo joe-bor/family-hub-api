@@ -16,8 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
@@ -28,6 +27,7 @@ public class CalendarEventService {
     private final CalendarEventRepository calendarEventRepository;
     private final FamilyMemberRepository familyMemberRepository;
     private final RecurrenceRuleValidator recurrenceRuleValidator;
+    private final RecurrenceExpander recurrenceExpander;
 
     public List<CalendarEventResponse> getAllEventsByFamily(
             Family family,
@@ -35,45 +35,94 @@ public class CalendarEventService {
             LocalDate endDate,
             UUID memberId
     ) {
-        Stream<CalendarEvent> calendarEventStream = calendarEventRepository.findByFamily(family).stream();
-
-        Predicate<CalendarEvent> byMemberId = event -> event.getMember().getId().equals(memberId);
-
         if (memberId != null) {
-            // Validate memberId passed belongs to logged in Family
             FamilyMember familyMember = familyMemberRepository.findById(memberId)
                     .orElseThrow(() -> new ResourceNotFoundException("Family Member", memberId));
             if (!familyMember.getFamily().getId().equals(family.getId())) {
                 throw new AccessDeniedException("Access Denied -- CalendarEventService.getAllEventsByFamily()");
             }
-
-            calendarEventStream = calendarEventStream.filter(byMemberId);
         }
 
-        if (startDate != null && endDate != null) {
-            // Range-overlap: event.date <= rangeEnd AND coalesce(event.endDate, event.date) >= rangeStart
-            LocalDate rangeStart = startDate;
-            LocalDate rangeEnd = endDate;
-            Predicate<CalendarEvent> byDateRange = event -> {
-                LocalDate eventStart = event.getDate();
-                LocalDate eventEnd = event.getEndDate() != null ? event.getEndDate() : event.getDate();
-                return !eventStart.isAfter(rangeEnd) && !eventEnd.isBefore(rangeStart);
-            };
-            calendarEventStream = calendarEventStream.filter(byDateRange);
-        } else if (startDate != null) {
-            // Event is relevant if it ends on or after startDate
+        boolean hasDateRange = startDate != null && endDate != null;
+
+        if (hasDateRange) {
+            return getEventsWithExpansion(family, startDate, endDate, memberId);
+        }
+
+        // No date range — return parent rows as-is alongside regular events (no expansion)
+        Stream<CalendarEvent> calendarEventStream = calendarEventRepository.findByFamily(family).stream();
+
+        if (memberId != null) {
+            UUID mid = memberId;
+            calendarEventStream = calendarEventStream.filter(e -> e.getMember().getId().equals(mid));
+        }
+
+        if (startDate != null) {
             calendarEventStream = calendarEventStream.filter(event -> {
                 LocalDate eventEnd = event.getEndDate() != null ? event.getEndDate() : event.getDate();
                 return !eventEnd.isBefore(startDate);
             });
         } else if (endDate != null) {
-            // Event is relevant if it starts on or before endDate
             calendarEventStream = calendarEventStream.filter(event -> !event.getDate().isAfter(endDate));
         }
 
         return calendarEventStream
                 .map(CalendarEventMapper::toDto)
                 .toList();
+    }
+
+    private List<CalendarEventResponse> getEventsWithExpansion(
+            Family family, LocalDate rangeStart, LocalDate rangeEnd, UUID memberId
+    ) {
+        // 1. Regular events (non-recurring, non-exception)
+        Stream<CalendarEvent> regularStream = calendarEventRepository.findRegularEventsByFamily(family).stream();
+        if (memberId != null) {
+            regularStream = regularStream.filter(e -> e.getMember().getId().equals(memberId));
+        }
+        // Filter regular events by date range overlap
+        List<CalendarEventResponse> regularResponses = regularStream
+                .filter(event -> {
+                    LocalDate eventStart = event.getDate();
+                    LocalDate eventEnd = event.getEndDate() != null ? event.getEndDate() : event.getDate();
+                    return !eventStart.isAfter(rangeEnd) && !eventEnd.isBefore(rangeStart);
+                })
+                .map(CalendarEventMapper::toDto)
+                .toList();
+
+        // 2. Recurring parents — filter by member before expansion
+        List<CalendarEvent> parents = calendarEventRepository.findRecurringParentsByFamily(family);
+        if (memberId != null) {
+            parents = parents.stream().filter(e -> e.getMember().getId().equals(memberId)).toList();
+        }
+
+        if (parents.isEmpty()) {
+            return new ArrayList<>(regularResponses);
+        }
+
+        // 3. Load exceptions for these parents
+        List<UUID> parentIds = parents.stream().map(CalendarEvent::getId).toList();
+        List<CalendarEvent> allExceptions = calendarEventRepository.findExceptionsByParentIds(parentIds);
+
+        // Group exceptions by parent ID then by originalDate
+        Map<UUID, Map<LocalDate, CalendarEvent>> exceptionsByParent = new HashMap<>();
+        for (CalendarEvent ex : allExceptions) {
+            exceptionsByParent
+                    .computeIfAbsent(ex.getRecurringEvent().getId(), k -> new HashMap<>())
+                    .put(ex.getOriginalDate(), ex);
+        }
+
+        // 4. Expand each parent
+        List<CalendarEventResponse> expanded = new ArrayList<>(regularResponses);
+        for (CalendarEvent parent : parents) {
+            Map<LocalDate, CalendarEvent> exceptions = exceptionsByParent.getOrDefault(parent.getId(), Map.of());
+            expanded.addAll(recurrenceExpander.expand(parent, rangeStart, rangeEnd, exceptions));
+        }
+
+        // 5. Sort by date then startTime (lexicographic — known limitation)
+        expanded.sort(Comparator.comparing(CalendarEventResponse::date)
+                .thenComparing(CalendarEventResponse::startTime));
+
+        return expanded;
     }
 
     public CalendarEventResponse getEventById(UUID id, Family family) {
