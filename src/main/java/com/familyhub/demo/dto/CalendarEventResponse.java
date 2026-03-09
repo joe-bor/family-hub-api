@@ -18,7 +18,10 @@ public record CalendarEventResponse(
         boolean isAllDay,
         String location,
         @JsonFormat(pattern = "yyyy-MM-dd")
-        LocalDate endDate
+        LocalDate endDate,
+        String recurrenceRule,
+        UUID recurringEventId,
+        boolean isRecurring
 ) {
 
 }

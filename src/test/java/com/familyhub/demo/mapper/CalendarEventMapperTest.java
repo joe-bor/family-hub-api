@@ -33,7 +33,7 @@ class CalendarEventMapperTest {
     void toEntity_parsesTimeCorrectly() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Event", "2:00 PM", "3:00 PM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null, null);
 
         CalendarEvent entity = CalendarEventMapper.toEntity(request, family, member);
 
@@ -45,7 +45,7 @@ class CalendarEventMapperTest {
     void toEntity_allDayEvent_setsFlag() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Birthday", "12:00 AM", "12:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, true, null, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, true, null, null, null);
 
         CalendarEvent entity = CalendarEventMapper.toEntity(request, family, member);
 
@@ -56,7 +56,7 @@ class CalendarEventMapperTest {
     void toEntity_nullIsAllDay_defaultsToFalse() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Event", "9:00 AM", "10:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, null, null, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, null, null, null, null);
 
         CalendarEvent entity = CalendarEventMapper.toEntity(request, family, member);
 
@@ -67,7 +67,7 @@ class CalendarEventMapperTest {
     void toEntity_invalidTimeString_throwsBadRequest() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Event", "not-a-time", "10:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null, null);
 
         assertThatThrownBy(() -> CalendarEventMapper.toEntity(request, family, member))
                 .isInstanceOf(BadRequestException.class)

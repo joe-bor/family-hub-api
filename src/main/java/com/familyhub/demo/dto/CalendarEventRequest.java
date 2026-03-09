@@ -38,7 +38,10 @@ public record CalendarEventRequest(
 
         // optional — only valid for all-day events
         @JsonFormat(pattern = "yyyy-MM-dd")
-        LocalDate endDate
+        LocalDate endDate,
+
+        // optional — RRULE string (e.g., "FREQ=WEEKLY;BYDAY=TU,TH")
+        String recurrenceRule
 ) {
 
 }

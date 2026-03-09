@@ -103,6 +103,7 @@ public final class TestDataFactory {
                 memberId,
                 false,
                 "Test Location",
+                null,
                 null
         );
     }
@@ -116,8 +117,38 @@ public final class TestDataFactory {
                 memberId,
                 true,
                 null,
-                LocalDate.of(2025, 3, 9)
+                LocalDate.of(2025, 3, 9),
+                null
         );
+    }
+
+    public static CalendarEventRequest createRecurringCalendarEventRequest(UUID memberId) {
+        return new CalendarEventRequest(
+                "Preschool",
+                "9:00 AM",
+                "12:00 PM",
+                LocalDate.of(2025, 6, 3),
+                memberId,
+                false,
+                "School",
+                null,
+                "FREQ=WEEKLY;BYDAY=TU,TH,FR"
+        );
+    }
+
+    public static CalendarEvent createRecurringCalendarEvent(Family family, FamilyMember member) {
+        CalendarEvent event = new CalendarEvent();
+        event.setId(UUID.randomUUID());
+        event.setTitle("Preschool");
+        event.setStartTime(LocalTime.of(9, 0));
+        event.setEndTime(LocalTime.of(12, 0));
+        event.setDate(LocalDate.of(2025, 6, 3));
+        event.setFamily(family);
+        event.setMember(member);
+        event.setAllDay(false);
+        event.setLocation("School");
+        event.setRecurrenceRule("FREQ=WEEKLY;BYDAY=TU,TH,FR");
+        return event;
     }
 
     public static CalendarEvent createMultiDayCalendarEvent(Family family, FamilyMember member) {
@@ -178,6 +209,9 @@ public final class TestDataFactory {
                 .isAllDay(false)
                 .location("Test Location")
                 .endDate(null)
+                .recurrenceRule(null)
+                .recurringEventId(null)
+                .isRecurring(false)
                 .build();
     }
 }

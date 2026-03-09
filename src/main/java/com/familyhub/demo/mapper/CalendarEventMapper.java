@@ -7,6 +7,7 @@ import com.familyhub.demo.model.CalendarEvent;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -30,6 +31,7 @@ public class CalendarEventMapper {
         calendarEvent.setAllDay(request.isAllDay() != null && request.isAllDay());
         calendarEvent.setLocation(request.location());
         calendarEvent.setEndDate(request.endDate());
+        calendarEvent.setRecurrenceRule(request.recurrenceRule());
 
         return  calendarEvent;
     }
@@ -45,6 +47,28 @@ public class CalendarEventMapper {
                 .isAllDay(calendarEvent.isAllDay())
                 .location(calendarEvent.getLocation())
                 .endDate(calendarEvent.getEndDate())
+                .recurrenceRule(calendarEvent.getRecurrenceRule())
+                .recurringEventId(calendarEvent.getRecurringEvent() != null
+                        ? calendarEvent.getRecurringEvent().getId() : null)
+                .isRecurring(calendarEvent.getRecurrenceRule() != null
+                        || calendarEvent.getRecurringEvent() != null)
+                .build();
+    }
+
+    public static CalendarEventResponse toInstanceResponse(CalendarEvent parent, LocalDate instanceDate) {
+        return CalendarEventResponse.builder()
+                .id(parent.getId())
+                .title(parent.getTitle())
+                .startTime(timeToString(parent.getStartTime()))
+                .endTime(timeToString(parent.getEndTime()))
+                .date(instanceDate)
+                .memberId(parent.getMember().getId())
+                .isAllDay(parent.isAllDay())
+                .location(parent.getLocation())
+                .endDate(null)
+                .recurrenceRule(parent.getRecurrenceRule())
+                .recurringEventId(null)
+                .isRecurring(true)
                 .build();
     }
 

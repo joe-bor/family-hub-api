@@ -41,4 +41,15 @@ public class CalendarEvent {
     private boolean isAllDay;
 
     private String location;
+
+    private String recurrenceRule;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "recurring_event_id")
+    private CalendarEvent recurringEvent;
+
+    private LocalDate originalDate;
+
+    @Column(nullable = false)
+    private boolean isCancelled;
 }
