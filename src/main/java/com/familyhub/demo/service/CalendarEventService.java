@@ -10,14 +10,20 @@ import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.repository.CalendarEventRepository;
 import com.familyhub.demo.repository.FamilyMemberRepository;
+import net.fortuna.ical4j.model.Recur;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.*;
-import java.util.function.Predicate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 @Service
@@ -53,8 +59,7 @@ public class CalendarEventService {
         Stream<CalendarEvent> calendarEventStream = calendarEventRepository.findByFamily(family).stream();
 
         if (memberId != null) {
-            UUID mid = memberId;
-            calendarEventStream = calendarEventStream.filter(e -> e.getMember().getId().equals(mid));
+            calendarEventStream = calendarEventStream.filter(e -> e.getMember().getId().equals(memberId));
         }
 
         if (startDate != null) {
@@ -74,6 +79,10 @@ public class CalendarEventService {
     private List<CalendarEventResponse> getEventsWithExpansion(
             Family family, LocalDate rangeStart, LocalDate rangeEnd, UUID memberId
     ) {
+        if (ChronoUnit.DAYS.between(rangeStart, rangeEnd) > 366) {
+            throw new BadRequestException("Date range must not exceed one year");
+        }
+
         // 1. Regular events (non-recurring, non-exception)
         Stream<CalendarEvent> regularStream = calendarEventRepository.findRegularEventsByFamily(family).stream();
         if (memberId != null) {
@@ -95,32 +104,31 @@ public class CalendarEventService {
             parents = parents.stream().filter(e -> e.getMember().getId().equals(memberId)).toList();
         }
 
-        if (parents.isEmpty()) {
-            return new ArrayList<>(regularResponses);
-        }
-
-        // 3. Load exceptions for these parents
-        List<UUID> parentIds = parents.stream().map(CalendarEvent::getId).toList();
-        List<CalendarEvent> allExceptions = calendarEventRepository.findExceptionsByParentIds(parentIds);
-
-        // Group exceptions by parent ID then by originalDate
-        Map<UUID, Map<LocalDate, CalendarEvent>> exceptionsByParent = new HashMap<>();
-        for (CalendarEvent ex : allExceptions) {
-            exceptionsByParent
-                    .computeIfAbsent(ex.getRecurringEvent().getId(), k -> new HashMap<>())
-                    .put(ex.getOriginalDate(), ex);
-        }
-
-        // 4. Expand each parent
         List<CalendarEventResponse> expanded = new ArrayList<>(regularResponses);
-        for (CalendarEvent parent : parents) {
-            Map<LocalDate, CalendarEvent> exceptions = exceptionsByParent.getOrDefault(parent.getId(), Map.of());
-            expanded.addAll(recurrenceExpander.expand(parent, rangeStart, rangeEnd, exceptions));
+
+        if (!parents.isEmpty()) {
+            // 3. Load exceptions for these parents
+            List<UUID> parentIds = parents.stream().map(CalendarEvent::getId).toList();
+            List<CalendarEvent> allExceptions = calendarEventRepository.findExceptionsByParentIds(parentIds);
+
+            // Group exceptions by parent ID then by originalDate
+            Map<UUID, Map<LocalDate, CalendarEvent>> exceptionsByParent = new HashMap<>();
+            for (CalendarEvent ex : allExceptions) {
+                exceptionsByParent
+                        .computeIfAbsent(ex.getRecurringEvent().getId(), k -> new HashMap<>())
+                        .put(ex.getOriginalDate(), ex);
+            }
+
+            // 4. Expand each parent
+            for (CalendarEvent parent : parents) {
+                Map<LocalDate, CalendarEvent> exceptions = exceptionsByParent.getOrDefault(parent.getId(), Map.of());
+                expanded.addAll(recurrenceExpander.expand(parent, rangeStart, rangeEnd, exceptions));
+            }
         }
 
-        // 5. Sort by date then startTime (lexicographic — known limitation)
+        // 5. Sort by date then startTime
         expanded.sort(Comparator.comparing(CalendarEventResponse::date)
-                .thenComparing(CalendarEventResponse::startTime));
+                .thenComparing(r -> CalendarEventMapper.parseTime(r.startTime())));
 
         return expanded;
     }
@@ -203,6 +211,7 @@ public class CalendarEventService {
         if (parent.getRecurrenceRule() == null) {
             throw new BadRequestException("Event is not recurring");
         }
+        validateInstanceDate(parent, date);
 
         FamilyMember familyMember = familyMemberRepository.findById(request.memberId())
                 .orElseThrow(() -> new ResourceNotFoundException("Family Member", request.memberId()));
@@ -228,6 +237,7 @@ public class CalendarEventService {
         exception.setDate(update.getDate());
         exception.setAllDay(update.isAllDay());
         exception.setLocation(update.getLocation());
+        exception.setEndDate(update.getEndDate());
         exception.setMember(update.getMember());
         exception.setCancelled(false);
 
@@ -242,7 +252,10 @@ public class CalendarEventService {
         if (parent.getRecurrenceRule() == null) {
             throw new BadRequestException("Event is not recurring");
         }
+        validateInstanceDate(parent, date);
 
+        // No member validation needed — delete doesn't accept a memberId.
+        // The exception row uses parent.getMember() which is already family-owned.
         CalendarEvent exception = calendarEventRepository.findByRecurringEventAndOriginalDate(parent, date)
                 .orElseGet(() -> {
                     CalendarEvent ex = new CalendarEvent();
@@ -261,6 +274,14 @@ public class CalendarEventService {
         calendarEventRepository.save(exception);
     }
 
+    private void validateInstanceDate(CalendarEvent parent, LocalDate date) {
+        Recur<LocalDate> recur = new Recur<>(parent.getRecurrenceRule());
+        List<LocalDate> dates = recur.getDates(parent.getDate(), date, date);
+        if (!dates.contains(date)) {
+            throw new BadRequestException("Date %s is not an occurrence of this recurring event".formatted(date));
+        }
+    }
+
     private void isEventTimeRangeValid(CalendarEvent event) {
         //  an "all day event" should not be constrained by this check. (eg. Birthday 12 AM - 12 AM)
         if (!event.isAllDay() && event.getStartTime().isAfter(event.getEndTime())) {
@@ -273,7 +294,7 @@ public class CalendarEventService {
             return;
         }
         if (event.getEndDate() != null) {
-            throw new BadRequestException("Recurring events must not have an end date");
+            throw new BadRequestException("Recurring events cannot span multiple days (endDate). To set when the series ends, use UNTIL in the recurrence rule.");
         }
         recurrenceRuleValidator.validate(event.getRecurrenceRule());
     }
