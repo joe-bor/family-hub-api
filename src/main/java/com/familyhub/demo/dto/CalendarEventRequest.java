@@ -43,5 +43,4 @@ public record CalendarEventRequest(
         // optional — RRULE string (e.g., "FREQ=WEEKLY;BYDAY=TU,TH")
         String recurrenceRule
 ) {
-
 }
