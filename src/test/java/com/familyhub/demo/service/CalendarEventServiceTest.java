@@ -366,13 +366,13 @@ class CalendarEventServiceTest {
         when(calendarEventRepository.findExceptionsByParentIds(List.of(parent.getId()))).thenReturn(List.of());
 
         CalendarEventResponse instance1 = CalendarEventResponse.builder()
-                .id(parent.getId()).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
+                .id(null).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
                 .date(LocalDate.of(2025, 6, 3)).memberId(MEMBER_ID).isRecurring(true)
-                .recurrenceRule("FREQ=WEEKLY;BYDAY=TU,TH,FR").build();
+                .recurringEventId(parent.getId()).recurrenceRule("FREQ=WEEKLY;BYDAY=TU,TH,FR").build();
         CalendarEventResponse instance2 = CalendarEventResponse.builder()
-                .id(parent.getId()).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
+                .id(null).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
                 .date(LocalDate.of(2025, 6, 5)).memberId(MEMBER_ID).isRecurring(true)
-                .recurrenceRule("FREQ=WEEKLY;BYDAY=TU,TH,FR").build();
+                .recurringEventId(parent.getId()).recurrenceRule("FREQ=WEEKLY;BYDAY=TU,TH,FR").build();
 
         when(recurrenceExpander.expand(eq(parent), any(), any(), any()))
                 .thenReturn(List.of(instance1, instance2));
@@ -396,8 +396,9 @@ class CalendarEventServiceTest {
         when(calendarEventRepository.findExceptionsByParentIds(List.of(parent.getId()))).thenReturn(List.of());
 
         CalendarEventResponse expandedInstance = CalendarEventResponse.builder()
-                .id(parent.getId()).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
-                .date(LocalDate.of(2025, 6, 3)).memberId(MEMBER_ID).isRecurring(true).build();
+                .id(null).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
+                .date(LocalDate.of(2025, 6, 3)).memberId(MEMBER_ID).isRecurring(true)
+                .recurringEventId(parent.getId()).build();
 
         when(recurrenceExpander.expand(eq(parent), any(), any(), any()))
                 .thenReturn(List.of(expandedInstance));
@@ -428,8 +429,9 @@ class CalendarEventServiceTest {
                 .thenReturn(List.of());
 
         CalendarEventResponse instance = CalendarEventResponse.builder()
-                .id(parentForMember.getId()).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
-                .date(LocalDate.of(2025, 6, 3)).memberId(MEMBER_ID).isRecurring(true).build();
+                .id(null).title("Preschool").startTime("9:00 AM").endTime("12:00 PM")
+                .date(LocalDate.of(2025, 6, 3)).memberId(MEMBER_ID).isRecurring(true)
+                .recurringEventId(parentForMember.getId()).build();
 
         when(recurrenceExpander.expand(eq(parentForMember), any(), any(), any()))
                 .thenReturn(List.of(instance));
@@ -465,7 +467,7 @@ class CalendarEventServiceTest {
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessage("Recurring events must not have an end date");
+                .hasMessage("Recurring events cannot span multiple days (endDate). To set when the series ends, use UNTIL in the recurrence rule.");
     }
 
     @Test
@@ -490,6 +492,38 @@ class CalendarEventServiceTest {
 
         assertThatThrownBy(() -> calendarEventService.deleteCalendarEvent(unknownId, family))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getAllEventsByFamily_dateRangeExceedsOneYear_throwsBadRequest() {
+        assertThatThrownBy(() -> calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 1, 1), LocalDate.of(2035, 1, 1), null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Date range must not exceed one year");
+    }
+
+    @Test
+    void getAllEventsByFamily_sortsByTimeCorrectly() {
+        CalendarEvent event10am = createCalendarEvent(family, member);
+        event10am.setId(UUID.randomUUID());
+        event10am.setStartTime(LocalTime.of(10, 0));
+        event10am.setDate(LocalDate.of(2025, 6, 15));
+
+        CalendarEvent event9am = createCalendarEvent(family, member);
+        event9am.setId(UUID.randomUUID());
+        event9am.setStartTime(LocalTime.of(9, 0));
+        event9am.setDate(LocalDate.of(2025, 6, 15));
+
+        when(calendarEventRepository.findRegularEventsByFamily(family))
+                .thenReturn(List.of(event10am, event9am));
+        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of());
+
+        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 30), null);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).startTime()).isEqualTo("9:00 AM");
+        assertThat(result.get(1).startTime()).isEqualTo("10:00 AM");
     }
 
     // --- Instance edit/delete tests ---
@@ -582,6 +616,35 @@ class CalendarEventServiceTest {
         calendarEventService.deleteRecurringInstance(parent.getId(), instanceDate, family);
 
         verify(calendarEventRepository).save(any(CalendarEvent.class));
+    }
+
+    @Test
+    void editRecurringInstance_invalidDate_throwsBadRequest() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        // FREQ=WEEKLY;BYDAY=TU,TH,FR — Wednesday is not an occurrence
+        LocalDate wednesday = LocalDate.of(2025, 6, 4);
+        CalendarEventRequest request = createCalendarEventRequest(MEMBER_ID);
+
+        when(calendarEventRepository.findByFamilyAndId(family, parent.getId())).thenReturn(Optional.of(parent));
+
+        assertThatThrownBy(() -> calendarEventService.editRecurringInstance(
+                parent.getId(), wednesday, request, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("is not an occurrence of this recurring event");
+    }
+
+    @Test
+    void deleteRecurringInstance_invalidDate_throwsBadRequest() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        // FREQ=WEEKLY;BYDAY=TU,TH,FR — Wednesday is not an occurrence
+        LocalDate wednesday = LocalDate.of(2025, 6, 4);
+
+        when(calendarEventRepository.findByFamilyAndId(family, parent.getId())).thenReturn(Optional.of(parent));
+
+        assertThatThrownBy(() -> calendarEventService.deleteRecurringInstance(
+                parent.getId(), wednesday, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("is not an occurrence of this recurring event");
     }
 
     @Test
