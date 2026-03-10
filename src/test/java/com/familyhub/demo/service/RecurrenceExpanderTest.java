@@ -47,8 +47,10 @@ class RecurrenceExpanderTest {
                         LocalDate.of(2025, 6, 5),  // Thu
                         LocalDate.of(2025, 6, 6)   // Fri
                 );
-        // All should reference the parent and be recurring
+        // All virtual instances should have null id and reference the parent
         assertThat(result).allSatisfy(r -> {
+            assertThat(r.id()).isNull();
+            assertThat(r.recurringEventId()).isEqualTo(parent.getId());
             assertThat(r.isRecurring()).isTrue();
             assertThat(r.title()).isEqualTo("Preschool");
         });

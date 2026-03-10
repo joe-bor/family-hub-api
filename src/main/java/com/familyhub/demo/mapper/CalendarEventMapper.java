@@ -23,8 +23,8 @@ public class CalendarEventMapper {
         CalendarEvent calendarEvent = new CalendarEvent();
 
         calendarEvent.setTitle(request.title());
-        calendarEvent.setStartTime(stringToLocalTime(request.startTime()));
-        calendarEvent.setEndTime(stringToLocalTime(request.endTime()));
+        calendarEvent.setStartTime(parseTime(request.startTime()));
+        calendarEvent.setEndTime(parseTime(request.endTime()));
         calendarEvent.setDate(request.date());
         calendarEvent.setMember(familyMember);
         calendarEvent.setFamily(family);
@@ -57,7 +57,7 @@ public class CalendarEventMapper {
 
     public static CalendarEventResponse toInstanceResponse(CalendarEvent parent, LocalDate instanceDate) {
         return CalendarEventResponse.builder()
-                .id(parent.getId())
+                .id(null)
                 .title(parent.getTitle())
                 .startTime(timeToString(parent.getStartTime()))
                 .endTime(timeToString(parent.getEndTime()))
@@ -67,7 +67,7 @@ public class CalendarEventMapper {
                 .location(parent.getLocation())
                 .endDate(null)
                 .recurrenceRule(parent.getRecurrenceRule())
-                .recurringEventId(null)
+                .recurringEventId(parent.getId())
                 .isRecurring(true)
                 .build();
     }
@@ -76,7 +76,7 @@ public class CalendarEventMapper {
         return localTime.format(timeFormatter);
     }
 
-    private static LocalTime stringToLocalTime(String time) {
+    public static LocalTime parseTime(String time) {
         try {
             return LocalTime.parse(time, timeFormatter);
         } catch (DateTimeParseException e) {

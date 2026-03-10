@@ -244,13 +244,15 @@ class CalendarEventIntegrationTest {
         String parentId = JsonPath.read(createBody, "$.data.id");
 
         // 2. GET expanded — query Jun 1–8 should return instances: Tue 3, Thu 5, Fri 6
-        String getBody = mockMvc.perform(get("/api/calendar/events")
+        //    Virtual instances should have id=null and recurringEventId=parentId
+        mockMvc.perform(get("/api/calendar/events")
                         .header("Authorization", "Bearer " + token)
                         .param("startDate", "2025-06-01")
                         .param("endDate", "2025-06-08"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(3))
-                .andReturn().getResponse().getContentAsString();
+                .andExpect(jsonPath("$.data[0].id").doesNotExist())
+                .andExpect(jsonPath("$.data[0].recurringEventId").value(parentId));
 
         // 3. Edit instance — change Thu Jun 5 title
         String editJson = """
