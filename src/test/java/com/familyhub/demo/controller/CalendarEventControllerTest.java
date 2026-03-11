@@ -82,7 +82,9 @@ class CalendarEventControllerTest {
         given(calendarEventService.getAllEventsByFamily(any(Family.class), any(), any(), any()))
                 .willReturn(List.of(sampleEventResponse()));
 
-        mockMvc.perform(get("/api/calendar/events"))
+        mockMvc.perform(get("/api/calendar/events")
+                        .param("startDate", "2025-06-01")
+                        .param("endDate", "2025-06-30"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].title").value("Test Event"))
                 .andExpect(jsonPath("$.data[0].id").value(EVENT_ID.toString()));
