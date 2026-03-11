@@ -79,7 +79,7 @@ class CalendarEventServiceTest {
         outsideRange.setDate(LocalDate.of(2025, 1, 1));
 
         when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(event, outsideRange));
-        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of());
+        when(calendarEventRepository.findRecurringParentsByFamily(eq(family), any())).thenReturn(List.of());
 
         List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
                 family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 30), null);
@@ -285,7 +285,7 @@ class CalendarEventServiceTest {
     void getAllEventsByFamily_multiDayEvent_overlapsDateRange() {
         CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
         when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(multiDay));
-        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of());
+        when(calendarEventRepository.findRecurringParentsByFamily(eq(family), any())).thenReturn(List.of());
 
         // Query Mar 8–8, event is Mar 7–9 → should overlap
         List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
@@ -299,7 +299,7 @@ class CalendarEventServiceTest {
     void getAllEventsByFamily_multiDayEvent_outsideDateRange() {
         CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
         when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(multiDay));
-        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of());
+        when(calendarEventRepository.findRecurringParentsByFamily(eq(family), any())).thenReturn(List.of());
 
         // Query Mar 10–15, event is Mar 7–9 → should not overlap
         List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
@@ -362,7 +362,7 @@ class CalendarEventServiceTest {
         CalendarEvent parent = createRecurringCalendarEvent(family, member);
 
         when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of());
-        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of(parent));
+        when(calendarEventRepository.findRecurringParentsByFamily(eq(family), any())).thenReturn(List.of(parent));
         when(calendarEventRepository.findExceptionsByParentIds(List.of(parent.getId()))).thenReturn(List.of());
 
         CalendarEventResponse instance1 = CalendarEventResponse.builder()
@@ -392,7 +392,7 @@ class CalendarEventServiceTest {
         regular.setDate(LocalDate.of(2025, 6, 4));
 
         when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(regular));
-        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of(parent));
+        when(calendarEventRepository.findRecurringParentsByFamily(eq(family), any())).thenReturn(List.of(parent));
         when(calendarEventRepository.findExceptionsByParentIds(List.of(parent.getId()))).thenReturn(List.of());
 
         CalendarEventResponse expandedInstance = CalendarEventResponse.builder()
@@ -423,7 +423,7 @@ class CalendarEventServiceTest {
 
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
         when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of());
-        when(calendarEventRepository.findRecurringParentsByFamily(family))
+        when(calendarEventRepository.findRecurringParentsByFamily(eq(family), any()))
                 .thenReturn(List.of(parentForOther, parentForMember));
         when(calendarEventRepository.findExceptionsByParentIds(List.of(parentForMember.getId())))
                 .thenReturn(List.of());
@@ -516,7 +516,7 @@ class CalendarEventServiceTest {
 
         when(calendarEventRepository.findRegularEventsByFamily(family))
                 .thenReturn(List.of(event10am, event9am));
-        when(calendarEventRepository.findRecurringParentsByFamily(family)).thenReturn(List.of());
+        when(calendarEventRepository.findRecurringParentsByFamily(eq(family), any())).thenReturn(List.of());
 
         List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
                 family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 30), null);
