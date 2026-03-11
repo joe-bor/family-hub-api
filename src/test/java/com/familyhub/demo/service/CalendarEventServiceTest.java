@@ -61,18 +61,6 @@ class CalendarEventServiceTest {
     }
 
     @Test
-    void getAllEventsByFamily_unfiltered_returnsAll() {
-        CalendarEvent event2 = createCalendarEvent(family, member);
-        event2.setId(UUID.randomUUID());
-        event2.setTitle("Second Event");
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(event, event2));
-
-        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(family, null, null, null);
-
-        assertThat(result).hasSize(2);
-    }
-
-    @Test
     void getAllEventsByFamily_filteredByDateRange_returnsFiltered() {
         CalendarEvent outsideRange = createCalendarEvent(family, member);
         outsideRange.setId(UUID.randomUUID());
@@ -97,11 +85,12 @@ class CalendarEventServiceTest {
         CalendarEvent otherEvent = createCalendarEvent(family, otherMember);
         otherEvent.setId(UUID.randomUUID());
 
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(event, otherEvent));
+        when(calendarEventRepository.findRegularEventsByFamily(family)).thenReturn(List.of(event, otherEvent));
+        when(calendarEventRepository.findRecurringParentsByFamily(eq(family), any())).thenReturn(List.of());
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
-                family, null, null, MEMBER_ID);
+                family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 30), MEMBER_ID);
 
         assertThat(result).hasSize(1);
         assertThat(result.getFirst().memberId()).isEqualTo(MEMBER_ID);
@@ -116,7 +105,8 @@ class CalendarEventServiceTest {
 
         when(familyMemberRepository.findById(wrongMemberId)).thenReturn(Optional.of(wrongMember));
 
-        assertThatThrownBy(() -> calendarEventService.getAllEventsByFamily(family, null, null, wrongMemberId))
+        assertThatThrownBy(() -> calendarEventService.getAllEventsByFamily(
+                family, LocalDate.of(2025, 6, 1), LocalDate.of(2025, 6, 30), wrongMemberId))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
@@ -309,55 +299,6 @@ class CalendarEventServiceTest {
     }
 
     @Test
-    void getAllEventsByFamily_startDateOnly_includesMultiDayEventEndingAfter() {
-        // Event is Mar 7–9, query startDate=Mar 8 → event ends Mar 9 which is >= Mar 8
-        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
-
-        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
-                family, LocalDate.of(2025, 3, 8), null, null);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.getFirst().title()).isEqualTo("Vacation");
-    }
-
-    @Test
-    void getAllEventsByFamily_startDateOnly_excludesMultiDayEventEndingBefore() {
-        // Event is Mar 7–9, query startDate=Mar 10 → event ends Mar 9 which is before Mar 10
-        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
-
-        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
-                family, LocalDate.of(2025, 3, 10), null, null);
-
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void getAllEventsByFamily_endDateOnly_includesMultiDayEventStartingBefore() {
-        // Event is Mar 7–9, query endDate=Mar 8 → event starts Mar 7 which is <= Mar 8
-        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
-
-        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
-                family, null, LocalDate.of(2025, 3, 8), null);
-
-        assertThat(result).hasSize(1);
-    }
-
-    @Test
-    void getAllEventsByFamily_endDateOnly_excludesMultiDayEventStartingAfter() {
-        // Event is Mar 7–9, query endDate=Mar 6 → event starts Mar 7 which is after Mar 6
-        CalendarEvent multiDay = createMultiDayCalendarEvent(family, member);
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(multiDay));
-
-        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
-                family, null, LocalDate.of(2025, 3, 6), null);
-
-        assertThat(result).isEmpty();
-    }
-
-    @Test
     void getAllEventsByFamily_withDateRange_expandsRecurringParents() {
         CalendarEvent parent = createRecurringCalendarEvent(family, member);
 
@@ -443,18 +384,6 @@ class CalendarEventServiceTest {
         assertThat(result.getFirst().memberId()).isEqualTo(MEMBER_ID);
         // Should NOT have expanded parentForOther
         verify(recurrenceExpander, never()).expand(eq(parentForOther), any(), any(), any());
-    }
-
-    @Test
-    void getAllEventsByFamily_noDateRange_returnsParentsAsIs() {
-        CalendarEvent parent = createRecurringCalendarEvent(family, member);
-        when(calendarEventRepository.findByFamily(family)).thenReturn(List.of(event, parent));
-
-        List<CalendarEventResponse> result = calendarEventService.getAllEventsByFamily(
-                family, null, null, null);
-
-        assertThat(result).hasSize(2);
-        verifyNoInteractions(recurrenceExpander);
     }
 
     @Test
