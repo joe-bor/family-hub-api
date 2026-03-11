@@ -99,7 +99,7 @@ public class CalendarEventService {
                 .toList();
 
         // 2. Recurring parents — filter by member before expansion
-        List<CalendarEvent> parents = calendarEventRepository.findRecurringParentsByFamily(family);
+        List<CalendarEvent> parents = calendarEventRepository.findRecurringParentsByFamily(family, rangeEnd);
         if (memberId != null) {
             parents = parents.stream().filter(e -> e.getMember().getId().equals(memberId)).toList();
         }
