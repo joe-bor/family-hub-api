@@ -10,3 +10,7 @@ CREATE INDEX idx_calendar_event_recurring_event_id
 ALTER TABLE calendar_event
     ADD CONSTRAINT chk_no_recurring_multiday
     CHECK (recurrence_rule IS NULL OR end_date IS NULL);
+
+ALTER TABLE calendar_event
+    ADD CONSTRAINT uq_recurring_event_original_date
+    UNIQUE (recurring_event_id, original_date);
