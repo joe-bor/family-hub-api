@@ -27,8 +27,8 @@ public class CalendarEventController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<CalendarEventResponse>>> getAllCalendarEventsByFamily(
             @AuthenticationPrincipal Family family,
-            @RequestParam(required = false) LocalDate startDate,
-            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate,
             @RequestParam(required = false) UUID memberId
             ) {
         List<CalendarEventResponse> allEventsByFamily =

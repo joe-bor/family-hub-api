@@ -49,31 +49,7 @@ public class CalendarEventService {
             }
         }
 
-        boolean hasDateRange = startDate != null && endDate != null;
-
-        if (hasDateRange) {
-            return getEventsWithExpansion(family, startDate, endDate, memberId);
-        }
-
-        // No date range — return parent rows as-is alongside regular events (no expansion)
-        Stream<CalendarEvent> calendarEventStream = calendarEventRepository.findByFamily(family).stream();
-
-        if (memberId != null) {
-            calendarEventStream = calendarEventStream.filter(e -> e.getMember().getId().equals(memberId));
-        }
-
-        if (startDate != null) {
-            calendarEventStream = calendarEventStream.filter(event -> {
-                LocalDate eventEnd = event.getEndDate() != null ? event.getEndDate() : event.getDate();
-                return !eventEnd.isBefore(startDate);
-            });
-        } else if (endDate != null) {
-            calendarEventStream = calendarEventStream.filter(event -> !event.getDate().isAfter(endDate));
-        }
-
-        return calendarEventStream
-                .map(CalendarEventMapper::toDto)
-                .toList();
+        return getEventsWithExpansion(family, startDate, endDate, memberId);
     }
 
     private List<CalendarEventResponse> getEventsWithExpansion(
