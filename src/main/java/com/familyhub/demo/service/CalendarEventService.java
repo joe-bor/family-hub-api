@@ -151,9 +151,7 @@ public class CalendarEventService {
 
         // We turn DTO to an Entity so we can save it in our DB
         CalendarEvent calendarEvent = CalendarEventMapper.toEntity(request, family, familyMember);
-        isEventTimeRangeValid(calendarEvent);
-        validateEndDate(calendarEvent);
-        validateRecurrenceRule(calendarEvent);
+        validateEvent(calendarEvent);
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
 
@@ -176,9 +174,7 @@ public class CalendarEventService {
 
         // Map DTO to Entity to handle `string <-> date/time` conversions
         CalendarEvent update = CalendarEventMapper.toEntity(request, family, familyMember);
-        isEventTimeRangeValid(update);
-        validateEndDate(update);
-        validateRecurrenceRule(update);
+        validateEvent(update);
 
         // Apply changes
         calendarEvent.setTitle(update.getTitle());
@@ -231,6 +227,9 @@ public class CalendarEventService {
 
         // Apply edits from request
         CalendarEvent update = CalendarEventMapper.toEntity(request, family, familyMember);
+        isEventTimeRangeValid(update);
+        validateEndDate(update);
+
         exception.setTitle(update.getTitle());
         exception.setStartTime(update.getStartTime());
         exception.setEndTime(update.getEndTime());
@@ -280,6 +279,12 @@ public class CalendarEventService {
         if (!dates.contains(date)) {
             throw new BadRequestException("Date %s is not an occurrence of this recurring event".formatted(date));
         }
+    }
+
+    private void validateEvent(CalendarEvent event) {
+        isEventTimeRangeValid(event);
+        validateEndDate(event);
+        validateRecurrenceRule(event);
     }
 
     private void isEventTimeRangeValid(CalendarEvent event) {
