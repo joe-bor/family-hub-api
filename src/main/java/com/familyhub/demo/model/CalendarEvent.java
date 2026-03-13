@@ -3,6 +3,8 @@ package com.familyhub.demo.model;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -46,6 +48,7 @@ public class CalendarEvent {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recurring_event_id")
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private CalendarEvent recurringEvent;
 
     private LocalDate originalDate;
