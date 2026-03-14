@@ -66,7 +66,7 @@ public class CalendarEventMapper {
                 .isAllDay(parent.isAllDay())
                 .location(parent.getLocation())
                 .endDate(null)
-                .recurrenceRule(null)
+                .recurrenceRule(parent.getRecurrenceRule())
                 .recurringEventId(parent.getId())
                 .isRecurring(true)
                 .build();
