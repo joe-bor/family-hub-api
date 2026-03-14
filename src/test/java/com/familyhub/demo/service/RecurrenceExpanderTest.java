@@ -53,6 +53,7 @@ class RecurrenceExpanderTest {
             assertThat(r.recurringEventId()).isEqualTo(parent.getId());
             assertThat(r.isRecurring()).isTrue();
             assertThat(r.title()).isEqualTo("Preschool");
+            assertThat(r.recurrenceRule()).isEqualTo(parent.getRecurrenceRule());
         });
     }
 
