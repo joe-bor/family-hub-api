@@ -113,11 +113,11 @@ public class GoogleOAuthService {
     @Transactional
     public void disconnect(UUID memberId) {
         tokenRepository.findByMemberId(memberId).ifPresent(token -> {
-            // Best-effort revoke at Google
+            // Best-effort revoke the refresh token at Google (more durable than access token)
             try {
-                String accessToken = encryptionService.decrypt(token.getAccessToken());
+                String refreshToken = encryptionService.decrypt(token.getRefreshToken());
                 restClient.post()
-                        .uri(REVOKE_URL + "?token=" + encode(accessToken))
+                        .uri(REVOKE_URL + "?token=" + encode(refreshToken))
                         .header("Content-Type", "application/x-www-form-urlencoded")
                         .retrieve()
                         .toBodilessEntity();

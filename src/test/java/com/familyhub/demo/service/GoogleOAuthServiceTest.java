@@ -85,16 +85,17 @@ class GoogleOAuthServiceTest {
     }
 
     @Test
-    void disconnect_deletesToken() {
+    void disconnect_revokesRefreshTokenAndDeletes() {
         UUID memberId = UUID.randomUUID();
         GoogleOAuthToken token = new GoogleOAuthToken();
-        token.setAccessToken("encrypted-access");
+        token.setRefreshToken("encrypted-refresh");
         when(tokenRepository.findByMemberId(memberId))
                 .thenReturn(Optional.of(token));
-        when(encryptionService.decrypt("encrypted-access")).thenReturn("plain-access");
+        when(encryptionService.decrypt("encrypted-refresh")).thenReturn("plain-refresh");
 
         oauthService.disconnect(memberId);
 
+        verify(encryptionService).decrypt("encrypted-refresh");
         verify(tokenRepository).delete(token);
     }
 
