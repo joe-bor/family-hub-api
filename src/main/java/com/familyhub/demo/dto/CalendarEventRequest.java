@@ -41,6 +41,10 @@ public record CalendarEventRequest(
         LocalDate endDate,
 
         // optional — RRULE string (e.g., "FREQ=WEEKLY;BYDAY=TU,TH")
-        String recurrenceRule
+        String recurrenceRule,
+
+        // optional — event description
+        @Size(max = 2000, message = "Description must be 2000 characters or less")
+        String description
 ) {
 }
