@@ -1,6 +1,7 @@
 package com.familyhub.demo.service;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
+import com.familyhub.demo.dto.GoogleTokenResponse;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.model.FamilyMember;
@@ -16,7 +17,6 @@ import org.springframework.web.client.RestClient;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -77,12 +77,11 @@ public class GoogleOAuthService {
     }
 
     @Transactional
-    @SuppressWarnings("unchecked")
     public GoogleOAuthToken exchangeCodeForTokens(String code, UUID memberId) {
         FamilyMember member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("Family Member", memberId));
 
-        Map<String, Object> response = restClient.post()
+        GoogleTokenResponse response = restClient.post()
                 .uri(TOKEN_URL)
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .body("code=" + encode(code) +
@@ -91,16 +90,11 @@ public class GoogleOAuthService {
                         "&redirect_uri=" + encode(config.getRedirectUri()) +
                         "&grant_type=authorization_code")
                 .retrieve()
-                .body(Map.class);
+                .body(GoogleTokenResponse.class);
 
-        if (response == null || !response.containsKey("access_token")) {
+        if (response == null || response.accessToken() == null) {
             throw new BadRequestException("Failed to exchange authorization code for tokens");
         }
-
-        String accessToken = (String) response.get("access_token");
-        String refreshToken = (String) response.get("refresh_token");
-        Integer expiresIn = (Integer) response.get("expires_in");
-        String scope = (String) response.get("scope");
 
         // Delete existing token if reconnecting (flush to avoid unique constraint violation)
         tokenRepository.findByMemberId(memberId)
@@ -109,12 +103,17 @@ public class GoogleOAuthService {
                     tokenRepository.flush();
                 });
 
+        if (response.refreshToken() == null) {
+            throw new BadRequestException("Google did not return a refresh token");
+        }
+
         GoogleOAuthToken token = new GoogleOAuthToken();
         token.setMember(member);
-        token.setAccessToken(encryptionService.encrypt(accessToken));
-        token.setRefreshToken(encryptionService.encrypt(refreshToken));
-        token.setTokenExpiry(Instant.now().plusSeconds(expiresIn != null ? expiresIn : 3600));
-        token.setScope(scope != null ? scope : SCOPES);
+        token.setAccessToken(encryptionService.encrypt(response.accessToken()));
+        token.setRefreshToken(encryptionService.encrypt(response.refreshToken()));
+        token.setTokenExpiry(Instant.now().plusSeconds(
+                response.expiresIn() != null ? response.expiresIn() : 3600));
+        token.setScope(response.scope() != null ? response.scope() : SCOPES);
 
         return tokenRepository.save(token);
     }
