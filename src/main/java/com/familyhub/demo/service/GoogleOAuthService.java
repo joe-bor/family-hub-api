@@ -15,6 +15,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -30,26 +31,31 @@ public class GoogleOAuthService {
     private final GoogleOAuthConfig config;
     private final GoogleOAuthTokenRepository tokenRepository;
     private final TokenEncryptionService encryptionService;
+    private final OAuthStateStore stateStore;
     private final RestClient restClient;
 
     @Autowired
     public GoogleOAuthService(GoogleOAuthConfig config,
                               GoogleOAuthTokenRepository tokenRepository,
-                              TokenEncryptionService encryptionService) {
-        this(config, tokenRepository, encryptionService, RestClient.create());
+                              TokenEncryptionService encryptionService,
+                              OAuthStateStore stateStore) {
+        this(config, tokenRepository, encryptionService, stateStore, RestClient.create());
     }
 
     public GoogleOAuthService(GoogleOAuthConfig config,
                               GoogleOAuthTokenRepository tokenRepository,
                               TokenEncryptionService encryptionService,
+                              OAuthStateStore stateStore,
                               RestClient restClient) {
         this.config = config;
         this.tokenRepository = tokenRepository;
         this.encryptionService = encryptionService;
+        this.stateStore = stateStore;
         this.restClient = restClient;
     }
 
     public String buildAuthorizationUrl(UUID memberId) {
+        String state = stateStore.generateState(memberId);
         return AUTH_URL + "?" +
                 "client_id=" + encode(config.getClientId()) +
                 "&redirect_uri=" + encode(config.getRedirectUri()) +
@@ -57,7 +63,11 @@ public class GoogleOAuthService {
                 "&scope=" + encode(SCOPES) +
                 "&access_type=offline" +
                 "&prompt=consent" +
-                "&state=" + memberId;
+                "&state=" + encode(state);
+    }
+
+    public Optional<UUID> consumeState(String state) {
+        return stateStore.consumeState(state);
     }
 
     @Transactional

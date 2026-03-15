@@ -2,6 +2,7 @@ package com.familyhub.demo.controller;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.dto.ApiResponse;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
@@ -41,7 +42,9 @@ public class GoogleOAuthController {
     public ResponseEntity<Void> handleCallback(
             @RequestParam String code,
             @RequestParam String state) {
-        UUID memberId = UUID.fromString(state);
+        UUID memberId = googleOAuthService.consumeState(state)
+                .orElseThrow(() -> new BadRequestException("Invalid or expired OAuth state"));
+
         FamilyMember member = familyMemberRepository.findById(memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("Family Member", memberId));
 
