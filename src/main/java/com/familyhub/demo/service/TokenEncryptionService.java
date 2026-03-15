@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -14,14 +15,23 @@ public class TokenEncryptionService {
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int GCM_TAG_LENGTH = 128;
     private static final int IV_LENGTH = 12;
+    private static final int REQUIRED_KEY_LENGTH = 32;
 
     private final SecretKeySpec keySpec;
 
-    public TokenEncryptionService(@Value("${security.token-encryption-key}") String key) {
-        // Pad or truncate key to 32 bytes for AES-256
-        byte[] keyBytes = new byte[32];
-        byte[] providedBytes = key.getBytes();
-        System.arraycopy(providedBytes, 0, keyBytes, 0, Math.min(providedBytes.length, 32));
+    public TokenEncryptionService(@Value("${security.token-encryption-key}") String base64Key) {
+        byte[] keyBytes;
+        try {
+            keyBytes = Base64.getDecoder().decode(base64Key.getBytes(StandardCharsets.UTF_8));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException(
+                    "Token encryption key must be Base64-encoded. Got invalid Base64.", e);
+        }
+        if (keyBytes.length != REQUIRED_KEY_LENGTH) {
+            throw new IllegalStateException(
+                    "Token encryption key must decode to exactly " + REQUIRED_KEY_LENGTH +
+                    " bytes for AES-256. Got " + keyBytes.length + " bytes.");
+        }
         this.keySpec = new SecretKeySpec(keyBytes, "AES");
     }
 

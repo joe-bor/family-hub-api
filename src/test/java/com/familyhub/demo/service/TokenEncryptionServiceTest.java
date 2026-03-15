@@ -4,15 +4,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class TokenEncryptionServiceTest {
+
+    // Base64-encoded 32-byte key
+    private static final String VALID_KEY = "hZVYYDBsu6sIox9GnjtoSB6Wv3cgjVG5euDC/JVAHZ4=";
 
     private TokenEncryptionService encryptionService;
 
     @BeforeEach
     void setUp() {
-        // Key is padded/truncated to 32 bytes internally for AES-256
-        encryptionService = new TokenEncryptionService("test-encryption-key-32-chars-ok!!");
+        encryptionService = new TokenEncryptionService(VALID_KEY);
     }
 
     @Test
@@ -55,5 +58,21 @@ class TokenEncryptionServiceTest {
         String encrypted = encryptionService.encrypt(original);
 
         assertThat(encrypted).doesNotContain(original);
+    }
+
+    @Test
+    void constructor_invalidBase64_throwsIllegalState() {
+        assertThatThrownBy(() -> new TokenEncryptionService("not-valid-base64!!!"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Base64-encoded");
+    }
+
+    @Test
+    void constructor_wrongKeyLength_throwsIllegalState() {
+        // Base64-encoded 16-byte key (too short for AES-256)
+        String shortKey = java.util.Base64.getEncoder().encodeToString(new byte[16]);
+        assertThatThrownBy(() -> new TokenEncryptionService(shortKey))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("32 bytes");
     }
 }

@@ -30,4 +30,5 @@ google:
     frontend-redirect-url: ${GOOGLE_FRONTEND_REDIRECT:http://localhost:5173/settings?googleConnected=true}
 
 security:
-  token-encryption-key: ${TOKEN_ENCRYPTION_KEY:default-dev-key-change-in-production}
+  # Must be a Base64-encoded 32-byte key for AES-256
+  token-encryption-key: ${TOKEN_ENCRYPTION_KEY}
