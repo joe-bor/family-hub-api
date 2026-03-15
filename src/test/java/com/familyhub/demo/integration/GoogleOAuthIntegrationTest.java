@@ -1,6 +1,7 @@
 package com.familyhub.demo.integration;
 
 import com.familyhub.demo.config.TestcontainersConfig;
+import com.familyhub.demo.service.TokenEncryptionService;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,9 @@ class GoogleOAuthIntegrationTest {
 
     @Autowired
     private DataSource dataSource;
+
+    @Autowired
+    private TokenEncryptionService encryptionService;
 
     private String token;
     private String memberId;
@@ -89,13 +93,17 @@ class GoogleOAuthIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.connected").value(false));
 
-        // 2. Manually insert a token row (simulates successful OAuth callback)
+        // 2. Manually insert a token row with real encryption (simulates successful OAuth callback)
+        String encryptedAccess = encryptionService.encrypt("fake-access-token");
+        String encryptedRefresh = encryptionService.encrypt("fake-refresh-token");
         try (var conn = dataSource.getConnection();
              var stmt = conn.prepareStatement(
                      "INSERT INTO google_oauth_token (id, member_id, access_token, refresh_token, token_expiry, scope) " +
-                             "VALUES (gen_random_uuid(), ?::uuid, 'encrypted-access', 'encrypted-refresh', ?, 'calendar.events.readonly')")) {
+                             "VALUES (gen_random_uuid(), ?::uuid, ?, ?, ?, 'calendar.events.readonly')")) {
             stmt.setString(1, memberId);
-            stmt.setObject(2, java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
+            stmt.setString(2, encryptedAccess);
+            stmt.setString(3, encryptedRefresh);
+            stmt.setObject(4, java.sql.Timestamp.from(Instant.now().plusSeconds(3600)));
             stmt.executeUpdate();
         }
 
