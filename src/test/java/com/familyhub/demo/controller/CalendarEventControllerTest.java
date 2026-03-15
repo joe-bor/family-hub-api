@@ -61,6 +61,8 @@ class CalendarEventControllerTest {
                 .recurrenceRule(null)
                 .recurringEventId(null)
                 .isRecurring(false)
+                .source("NATIVE")
+                .description(null)
                 .build();
     }
 

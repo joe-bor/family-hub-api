@@ -145,7 +145,7 @@ class CalendarEventServiceTest {
     void addCalendarEvent_invalidTimeRange_throwsBadRequest() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Bad Event", "10:00 AM", "9:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, false, null, null, null, null);
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
@@ -157,7 +157,7 @@ class CalendarEventServiceTest {
     void addCalendarEvent_allDayEvent_skipsTimeValidation() {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Birthday", "12:00 AM", "12:00 AM",
-                LocalDate.of(2025, 6, 15), MEMBER_ID, true, null, null, null);
+                LocalDate.of(2025, 6, 15), MEMBER_ID, true, null, null, null, null);
 
         CalendarEvent allDayEvent = createCalendarEvent(family, member);
         allDayEvent.setAllDay(true);
@@ -226,7 +226,7 @@ class CalendarEventServiceTest {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Trip", "9:00 AM", "10:00 AM",
                 LocalDate.of(2025, 3, 7), MEMBER_ID, false, null,
-                LocalDate.of(2025, 3, 9), null);
+                LocalDate.of(2025, 3, 9), null, null);
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
@@ -239,7 +239,7 @@ class CalendarEventServiceTest {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Trip", "12:00 AM", "12:00 AM",
                 LocalDate.of(2025, 3, 9), MEMBER_ID, true, null,
-                LocalDate.of(2025, 3, 7), null);
+                LocalDate.of(2025, 3, 7), null, null);
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
@@ -252,7 +252,7 @@ class CalendarEventServiceTest {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Birthday", "12:00 AM", "12:00 AM",
                 LocalDate.of(2025, 3, 7), MEMBER_ID, true, null,
-                LocalDate.of(2025, 3, 7), null);
+                LocalDate.of(2025, 3, 7), null, null);
 
         CalendarEvent savedEvent = createCalendarEvent(family, member);
         savedEvent.setAllDay(true);
@@ -391,7 +391,7 @@ class CalendarEventServiceTest {
         CalendarEventRequest request = new CalendarEventRequest(
                 "Dance", "9:00 AM", "10:00 AM",
                 LocalDate.of(2025, 6, 3), MEMBER_ID, true, null,
-                LocalDate.of(2025, 6, 10), "FREQ=WEEKLY;BYDAY=SU");
+                LocalDate.of(2025, 6, 10), "FREQ=WEEKLY;BYDAY=SU", null);
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> calendarEventService.addCalendarEvent(request, family))
@@ -463,7 +463,7 @@ class CalendarEventServiceTest {
         LocalDate instanceDate = LocalDate.of(2025, 6, 5);
         CalendarEventRequest request = new CalendarEventRequest(
                 "Edited Preschool", "10:00 AM", "1:00 PM",
-                instanceDate, MEMBER_ID, false, "New Location", null, null);
+                instanceDate, MEMBER_ID, false, "New Location", null, null, null);
 
         when(calendarEventRepository.findByFamilyAndId(family, parent.getId())).thenReturn(Optional.of(parent));
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
@@ -500,7 +500,7 @@ class CalendarEventServiceTest {
 
         CalendarEventRequest request = new CalendarEventRequest(
                 "Updated Title", "10:00 AM", "1:00 PM",
-                instanceDate, MEMBER_ID, false, null, null, null);
+                instanceDate, MEMBER_ID, false, null, null, null, null);
 
         when(calendarEventRepository.findByFamilyAndId(family, parent.getId())).thenReturn(Optional.of(parent));
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));

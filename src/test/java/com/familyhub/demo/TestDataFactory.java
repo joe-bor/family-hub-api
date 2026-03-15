@@ -104,6 +104,7 @@ public final class TestDataFactory {
                 false,
                 "Test Location",
                 null,
+                null,
                 null
         );
     }
@@ -118,6 +119,7 @@ public final class TestDataFactory {
                 true,
                 null,
                 LocalDate.of(2025, 3, 9),
+                null,
                 null
         );
     }
@@ -132,7 +134,8 @@ public final class TestDataFactory {
                 false,
                 "School",
                 null,
-                "FREQ=WEEKLY;BYDAY=TU,TH,FR"
+                "FREQ=WEEKLY;BYDAY=TU,TH,FR",
+                null
         );
     }
 
@@ -212,6 +215,8 @@ public final class TestDataFactory {
                 .recurrenceRule(null)
                 .recurringEventId(null)
                 .isRecurring(false)
+                .source("NATIVE")
+                .description(null)
                 .build();
     }
 }

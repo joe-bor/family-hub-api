@@ -21,7 +21,9 @@ public record CalendarEventResponse(
         LocalDate endDate,
         String recurrenceRule,
         UUID recurringEventId,
-        boolean isRecurring
+        boolean isRecurring,
+        String source,
+        String description
 ) {
 
 }
