@@ -36,4 +36,5 @@ google:
     frontend-redirect-url: http://localhost:5173/settings?googleConnected=true
 
 security:
-  token-encryption-key: test-encryption-key-32-chars-ok!!
+  # Base64-encoded 32-byte key for AES-256
+  token-encryption-key: hZVYYDBsu6sIox9GnjtoSB6Wv3cgjVG5euDC/JVAHZ4=
