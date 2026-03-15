@@ -5,6 +5,7 @@ import com.familyhub.demo.dto.CalendarEventResponse;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.model.CalendarEvent;
+import com.familyhub.demo.model.EventSource;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.repository.CalendarEventRepository;
@@ -602,5 +603,66 @@ class CalendarEventServiceTest {
 
         assertThat(existingException.isCancelled()).isTrue();
         verify(calendarEventRepository).save(existingException);
+    }
+
+    @Test
+    void updateCalendarEvent_googleSource_throwsBadRequest() {
+        CalendarEvent googleEvent = createCalendarEvent(family, member);
+        googleEvent.setSource(EventSource.GOOGLE);
+        googleEvent.setId(UUID.randomUUID());
+
+        CalendarEventRequest request = createCalendarEventRequest(MEMBER_ID);
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(calendarEventRepository.findByFamilyAndId(family, googleEvent.getId()))
+                .thenReturn(Optional.of(googleEvent));
+
+        assertThatThrownBy(() -> calendarEventService.updateCalendarEvent(
+                request, googleEvent.getId(), family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Google Calendar events cannot be modified");
+    }
+
+    @Test
+    void deleteCalendarEvent_googleSource_throwsBadRequest() {
+        CalendarEvent googleEvent = createCalendarEvent(family, member);
+        googleEvent.setSource(EventSource.GOOGLE);
+        googleEvent.setId(UUID.randomUUID());
+
+        when(calendarEventRepository.findByFamilyAndId(family, googleEvent.getId()))
+                .thenReturn(Optional.of(googleEvent));
+
+        assertThatThrownBy(() -> calendarEventService.deleteCalendarEvent(
+                googleEvent.getId(), family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Google Calendar events cannot be modified");
+    }
+
+    @Test
+    void editRecurringInstance_googleSource_throwsBadRequest() {
+        CalendarEvent googleParent = createRecurringCalendarEvent(family, member);
+        googleParent.setSource(EventSource.GOOGLE);
+
+        CalendarEventRequest request = createCalendarEventRequest(MEMBER_ID);
+        when(calendarEventRepository.findByFamilyAndId(family, googleParent.getId()))
+                .thenReturn(Optional.of(googleParent));
+
+        assertThatThrownBy(() -> calendarEventService.editRecurringInstance(
+                googleParent.getId(), LocalDate.of(2025, 6, 5), request, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Google Calendar events cannot be modified");
+    }
+
+    @Test
+    void deleteRecurringInstance_googleSource_throwsBadRequest() {
+        CalendarEvent googleParent = createRecurringCalendarEvent(family, member);
+        googleParent.setSource(EventSource.GOOGLE);
+
+        when(calendarEventRepository.findByFamilyAndId(family, googleParent.getId()))
+                .thenReturn(Optional.of(googleParent));
+
+        assertThatThrownBy(() -> calendarEventService.deleteRecurringInstance(
+                googleParent.getId(), LocalDate.of(2025, 6, 5), family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Google Calendar events cannot be modified");
     }
 }

@@ -6,6 +6,7 @@ import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.mapper.CalendarEventMapper;
 import com.familyhub.demo.model.CalendarEvent;
+import com.familyhub.demo.model.EventSource;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.repository.CalendarEventRepository;
@@ -147,6 +148,7 @@ public class CalendarEventService {
         // Validate the resource belongs to current family
         CalendarEvent calendarEvent = calendarEventRepository.findByFamilyAndId(family, eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Calendar Event", eventId));
+        rejectGoogleEvent(calendarEvent);
 
         // Map DTO to Entity to handle `string <-> date/time` conversions
         CalendarEvent update = CalendarEventMapper.toEntity(request, family, familyMember);
@@ -173,6 +175,7 @@ public class CalendarEventService {
     public void deleteCalendarEvent(UUID id, Family family) {
         CalendarEvent calendarEvent = calendarEventRepository.findByFamilyAndId(family, id)
                 .orElseThrow(() -> new ResourceNotFoundException("Calendar Event", id));
+        rejectGoogleEvent(calendarEvent);
 
         calendarEventRepository.delete(calendarEvent);
     }
@@ -181,6 +184,7 @@ public class CalendarEventService {
     public CalendarEventResponse editRecurringInstance(UUID parentId, LocalDate date, CalendarEventRequest request, Family family) {
         CalendarEvent parent = calendarEventRepository.findByFamilyAndId(family, parentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Calendar Event", parentId));
+        rejectGoogleEvent(parent);
         if (parent.getRecurrenceRule() == null) {
             throw new BadRequestException("Event is not recurring");
         }
@@ -226,6 +230,7 @@ public class CalendarEventService {
     public void deleteRecurringInstance(UUID parentId, LocalDate date, Family family) {
         CalendarEvent parent = calendarEventRepository.findByFamilyAndId(family, parentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Calendar Event", parentId));
+        rejectGoogleEvent(parent);
         if (parent.getRecurrenceRule() == null) {
             throw new BadRequestException("Event is not recurring");
         }
@@ -295,6 +300,13 @@ public class CalendarEventService {
         // Normalize: endDate == date means single-day, store as null
         if (event.getEndDate().equals(event.getDate())) {
             event.setEndDate(null);
+        }
+    }
+
+    private void rejectGoogleEvent(CalendarEvent event) {
+        if (event.getSource() == EventSource.GOOGLE) {
+            throw new BadRequestException(
+                    "Google Calendar events cannot be modified in FamilyHub. Edit them in Google Calendar.");
         }
     }
 }
