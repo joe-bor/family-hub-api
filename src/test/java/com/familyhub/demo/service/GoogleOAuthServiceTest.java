@@ -1,6 +1,9 @@
 package com.familyhub.demo.service;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
+import com.familyhub.demo.dto.GoogleTokenResponse;
+import com.familyhub.demo.exception.BadRequestException;
+import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.model.GoogleOAuthToken;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
@@ -15,7 +18,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -112,5 +117,86 @@ class GoogleOAuthServiceTest {
         oauthService.disconnect(memberId);
 
         verify(tokenRepository, never()).delete(any());
+    }
+
+    @Test
+    void exchangeCodeForTokens_happyPath_savesToken() {
+        UUID memberId = UUID.randomUUID();
+        FamilyMember member = new FamilyMember();
+        member.setId(memberId);
+
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+        when(tokenRepository.findByMemberId(memberId)).thenReturn(Optional.empty());
+        when(encryptionService.encrypt(anyString())).thenAnswer(inv -> "enc-" + inv.getArgument(0));
+        when(tokenRepository.save(any(GoogleOAuthToken.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        GoogleTokenResponse googleResponse = new GoogleTokenResponse(
+                "access-123", "refresh-456", 3600, "calendar.events.readonly");
+
+        // Mock RestClient chain
+        RestClient.RequestBodyUriSpec postSpec = mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec bodyUriSpec = mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+
+        when(restClient.post()).thenReturn(postSpec);
+        when(postSpec.uri(anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.body(anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(GoogleTokenResponse.class)).thenReturn(googleResponse);
+
+        GoogleOAuthToken result = oauthService.exchangeCodeForTokens("auth-code", memberId);
+
+        assertThat(result.getAccessToken()).isEqualTo("enc-access-123");
+        assertThat(result.getRefreshToken()).isEqualTo("enc-refresh-456");
+        verify(tokenRepository).save(any(GoogleOAuthToken.class));
+    }
+
+    @Test
+    void exchangeCodeForTokens_nullResponse_throwsBadRequest() {
+        UUID memberId = UUID.randomUUID();
+        FamilyMember member = new FamilyMember();
+        member.setId(memberId);
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+
+        // Mock RestClient chain returning null
+        RestClient.RequestBodyUriSpec postSpec = mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec bodyUriSpec = mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+
+        when(restClient.post()).thenReturn(postSpec);
+        when(postSpec.uri(anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.body(anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(GoogleTokenResponse.class)).thenReturn(null);
+
+        assertThatThrownBy(() -> oauthService.exchangeCodeForTokens("bad-code", memberId))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void exchangeCodeForTokens_missingAccessToken_throwsBadRequest() {
+        UUID memberId = UUID.randomUUID();
+        FamilyMember member = new FamilyMember();
+        member.setId(memberId);
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+
+        GoogleTokenResponse googleResponse = new GoogleTokenResponse(
+                null, "refresh-456", 3600, "scope");
+
+        RestClient.RequestBodyUriSpec postSpec = mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec bodyUriSpec = mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec = mock(RestClient.ResponseSpec.class);
+
+        when(restClient.post()).thenReturn(postSpec);
+        when(postSpec.uri(anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.header(anyString(), anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.body(anyString())).thenReturn(bodyUriSpec);
+        when(bodyUriSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.body(GoogleTokenResponse.class)).thenReturn(googleResponse);
+
+        assertThatThrownBy(() -> oauthService.exchangeCodeForTokens("bad-code", memberId))
+                .isInstanceOf(BadRequestException.class);
     }
 }
