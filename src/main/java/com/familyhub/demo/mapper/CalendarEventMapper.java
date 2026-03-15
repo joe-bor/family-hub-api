@@ -4,6 +4,7 @@ import com.familyhub.demo.dto.CalendarEventRequest;
 import com.familyhub.demo.dto.CalendarEventResponse;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.model.CalendarEvent;
+import com.familyhub.demo.model.EventSource;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 
@@ -32,6 +33,8 @@ public class CalendarEventMapper {
         calendarEvent.setLocation(request.location());
         calendarEvent.setEndDate(request.endDate());
         calendarEvent.setRecurrenceRule(request.recurrenceRule());
+        calendarEvent.setDescription(request.description());
+        calendarEvent.setSource(EventSource.NATIVE);
 
         return  calendarEvent;
     }
@@ -52,6 +55,8 @@ public class CalendarEventMapper {
                         ? calendarEvent.getRecurringEvent().getId() : null)
                 .isRecurring(calendarEvent.getRecurrenceRule() != null
                         || calendarEvent.getRecurringEvent() != null)
+                .source(calendarEvent.getSource().name())
+                .description(calendarEvent.getDescription())
                 .build();
     }
 
@@ -69,6 +74,8 @@ public class CalendarEventMapper {
                 .recurrenceRule(parent.getRecurrenceRule())
                 .recurringEventId(parent.getId())
                 .isRecurring(true)
+                .source(parent.getSource().name())
+                .description(parent.getDescription())
                 .build();
     }
 
