@@ -24,6 +24,9 @@ class CalendarEventIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private javax.sql.DataSource dataSource;
+
     private String token;
     private String memberId;
 
@@ -93,7 +96,8 @@ class CalendarEventIntegrationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(eventId))
-                .andExpect(jsonPath("$.data.title").value("Integration Event"));
+                .andExpect(jsonPath("$.data.title").value("Integration Event"))
+                .andExpect(jsonPath("$.data.source").value("NATIVE"));
 
         // Delete
         mockMvc.perform(delete("/api/calendar/events/{id}", eventId)
@@ -211,6 +215,150 @@ class CalendarEventIntegrationTest {
         mockMvc.perform(get("/api/calendar/events/{id}", eventId)
                         .header("Authorization", "Bearer " + familyBToken))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createEvent_hasSourceNative_andDescriptionRoundTrips() throws Exception {
+        // Create with description
+        String createBody = mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "Described Event",
+                                    "startTime": "9:00 AM",
+                                    "endTime": "10:00 AM",
+                                    "date": "2025-06-15",
+                                    "memberId": "%s",
+                                    "isAllDay": false,
+                                    "description": "This is a test description"
+                                }
+                                """.formatted(memberId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.source").value("NATIVE"))
+                .andExpect(jsonPath("$.data.description").value("This is a test description"))
+                .andReturn().getResponse().getContentAsString();
+
+        String eventId = JsonPath.read(createBody, "$.data.id");
+
+        // GET returns source and description
+        mockMvc.perform(get("/api/calendar/events/{id}", eventId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.source").value("NATIVE"))
+                .andExpect(jsonPath("$.data.description").value("This is a test description"));
+
+        // Update description
+        mockMvc.perform(put("/api/calendar/events/{id}", eventId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "Described Event",
+                                    "startTime": "9:00 AM",
+                                    "endTime": "10:00 AM",
+                                    "date": "2025-06-15",
+                                    "memberId": "%s",
+                                    "isAllDay": false,
+                                    "description": "Updated description"
+                                }
+                                """.formatted(memberId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.description").value("Updated description"));
+    }
+
+    @Test
+    void createEvent_withoutDescription_succeeds() throws Exception {
+        mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(eventJson(memberId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.source").value("NATIVE"))
+                .andExpect(jsonPath("$.data.description").doesNotExist());
+    }
+
+    @Test
+    void googleEvent_rejectsUpdateAndDelete() throws Exception {
+        // Create a normal event
+        String createBody = mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(eventJson(memberId)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String eventId = JsonPath.read(createBody, "$.data.id");
+
+        // Directly update source to GOOGLE via SQL
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement("UPDATE calendar_event SET source = 'GOOGLE' WHERE id = ?::uuid")) {
+            stmt.setString(1, eventId);
+            stmt.executeUpdate();
+        }
+
+        // PUT should be rejected
+        mockMvc.perform(put("/api/calendar/events/{id}", eventId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(eventJson(memberId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Google Calendar events cannot be modified in FamilyHub. Edit them in Google Calendar."));
+
+        // DELETE should be rejected
+        mockMvc.perform(delete("/api/calendar/events/{id}", eventId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Google Calendar events cannot be modified in FamilyHub. Edit them in Google Calendar."));
+    }
+
+    @Test
+    void googleRecurringEvent_rejectsInstanceUpdateAndDelete() throws Exception {
+        // Create a recurring event
+        String createBody = mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(recurringEventJson(memberId)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        String parentId = JsonPath.read(createBody, "$.data.id");
+
+        // Mark as GOOGLE source
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement("UPDATE calendar_event SET source = 'GOOGLE' WHERE id = ?::uuid")) {
+            stmt.setString(1, parentId);
+            stmt.executeUpdate();
+        }
+
+        // Edit instance — should be rejected
+        String editJson = """
+                {
+                    "title": "Hacked Event",
+                    "startTime": "9:00 AM",
+                    "endTime": "10:00 AM",
+                    "date": "2025-06-05",
+                    "memberId": "%s",
+                    "isAllDay": false
+                }
+                """.formatted(memberId);
+
+        mockMvc.perform(put("/api/calendar/events/{parentId}/instances/{date}", parentId, "2025-06-05")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(editJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Google Calendar events cannot be modified in FamilyHub. Edit them in Google Calendar."));
+
+        // Delete instance — should be rejected
+        mockMvc.perform(delete("/api/calendar/events/{parentId}/instances/{date}", parentId, "2025-06-05")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Google Calendar events cannot be modified in FamilyHub. Edit them in Google Calendar."));
     }
 
     private String recurringEventJson(String memberId) {
