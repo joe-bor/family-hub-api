@@ -3,14 +3,11 @@ package com.familyhub.demo.controller;
 import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.dto.ApiResponse;
 import com.familyhub.demo.exception.BadRequestException;
-import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.model.Family;
-import com.familyhub.demo.model.FamilyMember;
-import com.familyhub.demo.repository.FamilyMemberRepository;
+import com.familyhub.demo.service.FamilyMemberService;
 import com.familyhub.demo.service.GoogleOAuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,13 +21,13 @@ import java.util.UUID;
 public class GoogleOAuthController {
     private final GoogleOAuthService googleOAuthService;
     private final GoogleOAuthConfig googleOAuthConfig;
-    private final FamilyMemberRepository familyMemberRepository;
+    private final FamilyMemberService familyMemberService;
 
     @GetMapping("/auth")
     public ResponseEntity<ApiResponse<Map<String, String>>> getAuthorizationUrl(
             @RequestParam UUID memberId,
             @AuthenticationPrincipal Family family) {
-        validateMemberBelongsToFamily(memberId, family);
+        familyMemberService.findById(family, memberId);
 
         String url = googleOAuthService.buildAuthorizationUrl(memberId);
         return ResponseEntity.ok(new ApiResponse<>(
@@ -45,10 +42,7 @@ public class GoogleOAuthController {
         UUID memberId = googleOAuthService.consumeState(state)
                 .orElseThrow(() -> new BadRequestException("Invalid or expired OAuth state"));
 
-        FamilyMember member = familyMemberRepository.findById(memberId)
-                .orElseThrow(() -> new ResourceNotFoundException("Family Member", memberId));
-
-        googleOAuthService.exchangeCodeForTokens(code, member);
+        googleOAuthService.exchangeCodeForTokens(code, memberId);
 
         // Redirect to frontend settings page
         return ResponseEntity.status(302)
@@ -60,7 +54,7 @@ public class GoogleOAuthController {
     public ResponseEntity<ApiResponse<Void>> disconnect(
             @PathVariable UUID memberId,
             @AuthenticationPrincipal Family family) {
-        validateMemberBelongsToFamily(memberId, family);
+        familyMemberService.findById(family, memberId);
 
         googleOAuthService.disconnect(memberId);
         return ResponseEntity.ok(new ApiResponse<>(null, "Google account disconnected"));
@@ -70,19 +64,11 @@ public class GoogleOAuthController {
     public ResponseEntity<ApiResponse<Map<String, Boolean>>> getConnectionStatus(
             @PathVariable UUID memberId,
             @AuthenticationPrincipal Family family) {
-        validateMemberBelongsToFamily(memberId, family);
+        familyMemberService.findById(family, memberId);
 
         boolean connected = googleOAuthService.isConnected(memberId);
         return ResponseEntity.ok(new ApiResponse<>(
                 Map.of("connected", connected),
                 null));
-    }
-
-    private void validateMemberBelongsToFamily(UUID memberId, Family family) {
-        FamilyMember member = familyMemberRepository.findById(memberId)
-                .orElseThrow(() -> new ResourceNotFoundException("Family Member", memberId));
-        if (!member.getFamily().getId().equals(family.getId())) {
-            throw new AccessDeniedException("Access Denied -- member does not belong to this family");
-        }
     }
 }

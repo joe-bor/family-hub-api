@@ -2,6 +2,7 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.model.GoogleOAuthToken;
+import com.familyhub.demo.repository.FamilyMemberRepository;
 import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.web.client.RestClient;
@@ -24,6 +25,9 @@ class GoogleOAuthServiceTest {
     private GoogleOAuthTokenRepository tokenRepository;
 
     @Mock
+    private FamilyMemberRepository memberRepository;
+
+    @Mock
     private TokenEncryptionService encryptionService;
 
     @Mock
@@ -42,7 +46,7 @@ class GoogleOAuthServiceTest {
         config.setClientSecret("test-client-secret");
         config.setRedirectUri("http://localhost:8080/api/google/callback");
 
-        oauthService = new GoogleOAuthService(config, tokenRepository, encryptionService, stateStore, restClient);
+        oauthService = new GoogleOAuthService(config, tokenRepository, memberRepository, encryptionService, stateStore, restClient);
     }
 
     @Test

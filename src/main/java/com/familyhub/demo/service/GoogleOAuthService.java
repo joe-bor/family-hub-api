@@ -2,8 +2,10 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.exception.BadRequestException;
+import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.model.GoogleOAuthToken;
+import com.familyhub.demo.repository.FamilyMemberRepository;
 import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +32,7 @@ public class GoogleOAuthService {
 
     private final GoogleOAuthConfig config;
     private final GoogleOAuthTokenRepository tokenRepository;
+    private final FamilyMemberRepository memberRepository;
     private final TokenEncryptionService encryptionService;
     private final OAuthStateStore stateStore;
     private final RestClient restClient;
@@ -37,18 +40,21 @@ public class GoogleOAuthService {
     @Autowired
     public GoogleOAuthService(GoogleOAuthConfig config,
                               GoogleOAuthTokenRepository tokenRepository,
+                              FamilyMemberRepository memberRepository,
                               TokenEncryptionService encryptionService,
                               OAuthStateStore stateStore) {
-        this(config, tokenRepository, encryptionService, stateStore, RestClient.create());
+        this(config, tokenRepository, memberRepository, encryptionService, stateStore, RestClient.create());
     }
 
     public GoogleOAuthService(GoogleOAuthConfig config,
                               GoogleOAuthTokenRepository tokenRepository,
+                              FamilyMemberRepository memberRepository,
                               TokenEncryptionService encryptionService,
                               OAuthStateStore stateStore,
                               RestClient restClient) {
         this.config = config;
         this.tokenRepository = tokenRepository;
+        this.memberRepository = memberRepository;
         this.encryptionService = encryptionService;
         this.stateStore = stateStore;
         this.restClient = restClient;
@@ -72,7 +78,10 @@ public class GoogleOAuthService {
 
     @Transactional
     @SuppressWarnings("unchecked")
-    public GoogleOAuthToken exchangeCodeForTokens(String code, FamilyMember member) {
+    public GoogleOAuthToken exchangeCodeForTokens(String code, UUID memberId) {
+        FamilyMember member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("Family Member", memberId));
+
         Map<String, Object> response = restClient.post()
                 .uri(TOKEN_URL)
                 .header("Content-Type", "application/x-www-form-urlencoded")
@@ -94,7 +103,7 @@ public class GoogleOAuthService {
         String scope = (String) response.get("scope");
 
         // Delete existing token if reconnecting (flush to avoid unique constraint violation)
-        tokenRepository.findByMemberId(member.getId())
+        tokenRepository.findByMemberId(memberId)
                 .ifPresent(existing -> {
                     tokenRepository.delete(existing);
                     tokenRepository.flush();
