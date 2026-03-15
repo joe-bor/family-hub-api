@@ -29,6 +29,9 @@ class GoogleOAuthServiceTest {
     @Mock
     private RestClient restClient;
 
+    @Mock
+    private OAuthStateStore stateStore;
+
     private GoogleOAuthConfig config;
     private GoogleOAuthService oauthService;
 
@@ -39,12 +42,15 @@ class GoogleOAuthServiceTest {
         config.setClientSecret("test-client-secret");
         config.setRedirectUri("http://localhost:8080/api/google/callback");
 
-        oauthService = new GoogleOAuthService(config, tokenRepository, encryptionService, restClient);
+        oauthService = new GoogleOAuthService(config, tokenRepository, encryptionService, stateStore, restClient);
     }
 
     @Test
     void buildAuthorizationUrl_containsRequiredParams() {
         UUID memberId = UUID.randomUUID();
+        String stateToken = UUID.randomUUID().toString();
+        when(stateStore.generateState(memberId)).thenReturn(stateToken);
+
         String url = oauthService.buildAuthorizationUrl(memberId);
 
         assertThat(url).contains("https://accounts.google.com/o/oauth2/v2/auth");
@@ -53,7 +59,8 @@ class GoogleOAuthServiceTest {
         assertThat(url).contains("response_type=code");
         assertThat(url).contains("access_type=offline");
         assertThat(url).contains("prompt=consent");
-        assertThat(url).contains("state=" + memberId);
+        assertThat(url).contains("state=" + stateToken);
+        assertThat(url).doesNotContain(memberId.toString());
         assertThat(url).contains("scope=");
         assertThat(url).contains("calendar.events.readonly");
         assertThat(url).contains("calendar.calendarlist.readonly");

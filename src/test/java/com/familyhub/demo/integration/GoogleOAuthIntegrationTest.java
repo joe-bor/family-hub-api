@@ -145,13 +145,20 @@ class GoogleOAuthIntegrationTest {
     }
 
     @Test
+    void callback_invalidState_returns400() throws Exception {
+        // Callback with unknown state token should return 400, not 401
+        mockMvc.perform(get("/api/google/callback")
+                        .param("code", "invalid-code")
+                        .param("state", "bogus-state-token"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void callback_accessibleWithoutAuth() throws Exception {
         // Callback should not require JWT — it's a Google redirect
-        // Will fail because "invalid-code" is not a real Google code,
-        // but should NOT return 401 (should get a 400 or 500 instead)
         int status = mockMvc.perform(get("/api/google/callback")
                         .param("code", "invalid-code")
-                        .param("state", memberId))
+                        .param("state", "bogus-state-token"))
                 .andReturn().getResponse().getStatus();
 
         assertThat(status).isNotEqualTo(401);

@@ -151,18 +151,30 @@ class GoogleOAuthControllerTest {
     }
 
     @Test
-    void callback_redirectsToFrontend() throws Exception {
+    void callback_validState_redirectsToFrontend() throws Exception {
+        String stateToken = UUID.randomUUID().toString();
         FamilyMember member = createMember();
+        when(googleOAuthService.consumeState(stateToken)).thenReturn(Optional.of(MEMBER_ID));
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
         when(googleOAuthConfig.getFrontendRedirectUrl())
                 .thenReturn("http://localhost:5173/settings?googleConnected=true");
 
         mockMvc.perform(get("/api/google/callback")
                         .param("code", "test-auth-code")
-                        .param("state", MEMBER_ID.toString()))
+                        .param("state", stateToken))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(header().string("Location", "http://localhost:5173/settings?googleConnected=true"));
 
         verify(googleOAuthService).exchangeCodeForTokens(eq("test-auth-code"), any(FamilyMember.class));
+    }
+
+    @Test
+    void callback_invalidState_returns400() throws Exception {
+        when(googleOAuthService.consumeState("bogus-state")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/google/callback")
+                        .param("code", "test-auth-code")
+                        .param("state", "bogus-state"))
+                .andExpect(status().isBadRequest());
     }
 }
