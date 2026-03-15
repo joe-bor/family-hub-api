@@ -162,6 +162,7 @@ public class CalendarEventService {
         calendarEvent.setEndDate(update.getEndDate());
         calendarEvent.setMember(update.getMember());
         calendarEvent.setRecurrenceRule(update.getRecurrenceRule());
+        calendarEvent.setDescription(update.getDescription());
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
 
@@ -215,6 +216,7 @@ public class CalendarEventService {
         exception.setEndDate(update.getEndDate());
         exception.setMember(update.getMember());
         exception.setCancelled(false);
+        exception.setDescription(update.getDescription());
 
         CalendarEvent saved = calendarEventRepository.save(exception);
         return CalendarEventMapper.toDto(saved);
