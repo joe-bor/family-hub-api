@@ -55,4 +55,11 @@ public class CalendarEvent {
 
     @Column(nullable = false)
     private boolean isCancelled;
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private EventSource source = EventSource.NATIVE;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
 }
