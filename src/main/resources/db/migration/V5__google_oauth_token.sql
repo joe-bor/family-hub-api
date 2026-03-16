@@ -3,8 +3,8 @@ CREATE TABLE google_oauth_token (
     member_id UUID NOT NULL UNIQUE REFERENCES family_member(id) ON DELETE CASCADE,
     access_token TEXT NOT NULL,
     refresh_token TEXT NOT NULL,
-    token_expiry TIMESTAMP NOT NULL,
+    token_expiry TIMESTAMPTZ NOT NULL,
     scope TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT now(),
-    updated_at TIMESTAMP NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
