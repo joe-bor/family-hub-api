@@ -7,6 +7,7 @@ import com.familyhub.demo.model.Family;
 import com.familyhub.demo.service.FamilyMemberService;
 import com.familyhub.demo.service.GoogleOAuthService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/google")
 @RequiredArgsConstructor
@@ -37,16 +39,31 @@ public class GoogleOAuthController {
 
     @GetMapping("/callback")
     public ResponseEntity<Void> handleCallback(
-            @RequestParam String code,
-            @RequestParam String state) {
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error) {
+        String redirectUrl = googleOAuthConfig.getFrontendRedirectUrl();
+
+        if (error != null || code == null) {
+            return ResponseEntity.status(302)
+                    .location(URI.create(redirectUrl + "?error=consent_denied"))
+                    .build();
+        }
+
         UUID memberId = googleOAuthService.consumeState(state)
                 .orElseThrow(() -> new BadRequestException("Invalid or expired OAuth state"));
 
-        googleOAuthService.exchangeCodeForTokens(code, memberId);
+        try {
+            googleOAuthService.exchangeCodeForTokens(code, memberId);
+        } catch (Exception e) {
+            log.error("Token exchange failed for member {}: {}", memberId, e.getMessage());
+            return ResponseEntity.status(302)
+                    .location(URI.create(redirectUrl + "?error=token_exchange_failed"))
+                    .build();
+        }
 
-        // Redirect to frontend settings page
         return ResponseEntity.status(302)
-                .location(URI.create(googleOAuthConfig.getFrontendRedirectUrl()))
+                .location(URI.create(redirectUrl + "?googleConnected=true"))
                 .build();
     }
 
