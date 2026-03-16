@@ -162,6 +162,18 @@ class GoogleOAuthIntegrationTest {
     }
 
     @Test
+    void callback_consentDenied_redirectsWithError() throws Exception {
+        var result = mockMvc.perform(get("/api/google/callback")
+                        .param("error", "access_denied")
+                        .param("state", "somestate"))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+
+        String location = result.getResponse().getHeader("Location");
+        assertThat(location).contains("error=consent_denied");
+    }
+
+    @Test
     void callback_accessibleWithoutAuth() throws Exception {
         // Callback should not require JWT — it's a Google redirect
         int status = mockMvc.perform(get("/api/google/callback")
