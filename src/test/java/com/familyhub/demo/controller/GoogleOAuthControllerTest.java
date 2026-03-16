@@ -24,9 +24,8 @@ import java.util.UUID;
 import static com.familyhub.demo.TestDataFactory.MEMBER_ID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.*;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -119,7 +118,7 @@ class GoogleOAuthControllerTest {
         String stateToken = UUID.randomUUID().toString();
         when(googleOAuthService.consumeState(stateToken)).thenReturn(Optional.of(MEMBER_ID));
         when(googleOAuthConfig.getFrontendRedirectUrl())
-                .thenReturn("http://localhost:5173/settings?googleConnected=true");
+                .thenReturn("http://localhost:5173/settings");
 
         mockMvc.perform(get("/api/google/callback")
                         .param("code", "test-auth-code")
@@ -138,5 +137,33 @@ class GoogleOAuthControllerTest {
                         .param("code", "test-auth-code")
                         .param("state", "bogus-state"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void callback_consentDenied_redirectsWithError() throws Exception {
+        when(googleOAuthConfig.getFrontendRedirectUrl())
+                .thenReturn("http://localhost:5173/settings");
+
+        mockMvc.perform(get("/api/google/callback")
+                        .param("error", "access_denied")
+                        .param("state", "somestate"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(header().string("Location", "http://localhost:5173/settings?error=consent_denied"));
+    }
+
+    @Test
+    void callback_tokenExchangeFails_redirectsWithError() throws Exception {
+        String stateToken = UUID.randomUUID().toString();
+        when(googleOAuthService.consumeState(stateToken)).thenReturn(Optional.of(MEMBER_ID));
+        when(googleOAuthService.exchangeCodeForTokens(eq("test-auth-code"), eq(MEMBER_ID)))
+                .thenThrow(new RuntimeException("Google API error"));
+        when(googleOAuthConfig.getFrontendRedirectUrl())
+                .thenReturn("http://localhost:5173/settings");
+
+        mockMvc.perform(get("/api/google/callback")
+                        .param("code", "test-auth-code")
+                        .param("state", stateToken))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(header().string("Location", "http://localhost:5173/settings?error=token_exchange_failed"));
     }
 }
