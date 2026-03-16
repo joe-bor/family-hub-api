@@ -7,12 +7,17 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import com.familyhub.demo.model.FamilyMember;
+import com.familyhub.demo.model.EventSource;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface CalendarEventRepository extends JpaRepository<CalendarEvent, UUID> {
+    void deleteByMemberAndSource(FamilyMember member, EventSource source);
+
     List<CalendarEvent> findByFamily(Family family);
     Optional<CalendarEvent> findByFamilyAndId(Family family, UUID uuid);
 

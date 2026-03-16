@@ -4,10 +4,13 @@ import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.dto.GoogleTokenResponse;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
+import com.familyhub.demo.model.EventSource;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.model.GoogleOAuthToken;
+import com.familyhub.demo.repository.CalendarEventRepository;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
+import com.familyhub.demo.repository.GoogleSyncedCalendarRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,8 @@ public class GoogleOAuthService {
     private final FamilyMemberRepository memberRepository;
     private final TokenEncryptionService encryptionService;
     private final OAuthStateStore stateStore;
+    private final GoogleSyncedCalendarRepository syncedCalendarRepository;
+    private final CalendarEventRepository calendarEventRepository;
     private final RestClient restClient;
 
     @Autowired
@@ -42,8 +47,11 @@ public class GoogleOAuthService {
                               GoogleOAuthTokenRepository tokenRepository,
                               FamilyMemberRepository memberRepository,
                               TokenEncryptionService encryptionService,
-                              OAuthStateStore stateStore) {
-        this(config, tokenRepository, memberRepository, encryptionService, stateStore, RestClient.create());
+                              OAuthStateStore stateStore,
+                              GoogleSyncedCalendarRepository syncedCalendarRepository,
+                              CalendarEventRepository calendarEventRepository) {
+        this(config, tokenRepository, memberRepository, encryptionService, stateStore,
+                syncedCalendarRepository, calendarEventRepository, RestClient.create());
     }
 
     public GoogleOAuthService(GoogleOAuthConfig config,
@@ -51,12 +59,16 @@ public class GoogleOAuthService {
                               FamilyMemberRepository memberRepository,
                               TokenEncryptionService encryptionService,
                               OAuthStateStore stateStore,
+                              GoogleSyncedCalendarRepository syncedCalendarRepository,
+                              CalendarEventRepository calendarEventRepository,
                               RestClient restClient) {
         this.config = config;
         this.tokenRepository = tokenRepository;
         this.memberRepository = memberRepository;
         this.encryptionService = encryptionService;
         this.stateStore = stateStore;
+        this.syncedCalendarRepository = syncedCalendarRepository;
+        this.calendarEventRepository = calendarEventRepository;
         this.restClient = restClient;
     }
 
@@ -132,6 +144,12 @@ public class GoogleOAuthService {
             } catch (Exception e) {
                 log.warn("Failed to revoke Google token for member {}: {}", memberId, e.getMessage());
             }
+
+            // Delete synced calendar rows (CASCADE from token would handle this, but be explicit)
+            syncedCalendarRepository.deleteByMemberId(memberId);
+
+            // Delete all Google-sourced calendar events for this member
+            calendarEventRepository.deleteByMemberAndSource(token.getMember(), EventSource.GOOGLE);
 
             tokenRepository.delete(token);
         });
