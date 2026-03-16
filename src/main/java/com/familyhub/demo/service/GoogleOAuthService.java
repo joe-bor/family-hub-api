@@ -96,16 +96,16 @@ public class GoogleOAuthService {
             throw new BadRequestException("Failed to exchange authorization code for tokens");
         }
 
+        if (response.refreshToken() == null) {
+            throw new BadRequestException("Google did not return a refresh token");
+        }
+
         // Delete existing token if reconnecting (flush to avoid unique constraint violation)
         tokenRepository.findByMemberId(memberId)
                 .ifPresent(existing -> {
                     tokenRepository.delete(existing);
                     tokenRepository.flush();
                 });
-
-        if (response.refreshToken() == null) {
-            throw new BadRequestException("Google did not return a refresh token");
-        }
 
         GoogleOAuthToken token = new GoogleOAuthToken();
         token.setMember(member);
