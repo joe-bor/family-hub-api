@@ -12,6 +12,7 @@ import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,7 @@ public class GoogleCredentialService {
     private final HttpTransport httpTransport;
     private final JsonFactory jsonFactory;
 
+    @Autowired
     public GoogleCredentialService(GoogleOAuthTokenRepository tokenRepository,
                                    TokenEncryptionService encryptionService,
                                    GoogleOAuthConfig config) throws GeneralSecurityException, IOException {

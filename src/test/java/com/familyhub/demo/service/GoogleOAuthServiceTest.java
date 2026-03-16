@@ -3,10 +3,13 @@ package com.familyhub.demo.service;
 import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.dto.GoogleTokenResponse;
 import com.familyhub.demo.exception.BadRequestException;
+import com.familyhub.demo.model.EventSource;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.model.GoogleOAuthToken;
+import com.familyhub.demo.repository.CalendarEventRepository;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
+import com.familyhub.demo.repository.GoogleSyncedCalendarRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.web.client.RestClient;
 import org.junit.jupiter.api.Test;
@@ -41,6 +44,12 @@ class GoogleOAuthServiceTest {
     @Mock
     private OAuthStateStore stateStore;
 
+    @Mock
+    private GoogleSyncedCalendarRepository syncedCalendarRepository;
+
+    @Mock
+    private CalendarEventRepository calendarEventRepository;
+
     private GoogleOAuthConfig config;
     private GoogleOAuthService oauthService;
 
@@ -51,7 +60,8 @@ class GoogleOAuthServiceTest {
         config.setClientSecret("test-client-secret");
         config.setRedirectUri("http://localhost:8080/api/google/callback");
 
-        oauthService = new GoogleOAuthService(config, tokenRepository, memberRepository, encryptionService, stateStore, restClient);
+        oauthService = new GoogleOAuthService(config, tokenRepository, memberRepository, encryptionService, stateStore,
+                syncedCalendarRepository, calendarEventRepository, restClient);
     }
 
     @Test
@@ -94,10 +104,14 @@ class GoogleOAuthServiceTest {
     }
 
     @Test
-    void disconnect_revokesRefreshTokenAndDeletes() {
+    void disconnect_revokesRefreshTokenAndCleansUp() {
         UUID memberId = UUID.randomUUID();
+        FamilyMember member = new FamilyMember();
+        member.setId(memberId);
+
         GoogleOAuthToken token = new GoogleOAuthToken();
         token.setRefreshToken("encrypted-refresh");
+        token.setMember(member);
         when(tokenRepository.findByMemberId(memberId))
                 .thenReturn(Optional.of(token));
         when(encryptionService.decrypt("encrypted-refresh")).thenReturn("plain-refresh");
@@ -105,6 +119,8 @@ class GoogleOAuthServiceTest {
         oauthService.disconnect(memberId);
 
         verify(encryptionService).decrypt("encrypted-refresh");
+        verify(syncedCalendarRepository).deleteByMemberId(memberId);
+        verify(calendarEventRepository).deleteByMemberAndSource(member, EventSource.GOOGLE);
         verify(tokenRepository).delete(token);
     }
 

@@ -2,6 +2,7 @@ package com.familyhub.demo.controller;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.config.SecurityConfig;
+import com.familyhub.demo.repository.GoogleSyncedCalendarRepository;
 import com.familyhub.demo.security.JwtAuthenticationEntryPoint;
 import com.familyhub.demo.security.JwtAuthenticationFilter;
 import com.familyhub.demo.security.WithMockFamily;
@@ -18,6 +19,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -52,6 +54,9 @@ class GoogleOAuthControllerTest {
     @MockitoBean
     private GoogleOAuthConfig googleOAuthConfig;
 
+    @MockitoBean
+    private GoogleSyncedCalendarRepository syncedCalendarRepository;
+
     @Test
     @WithMockFamily
     void getAuthorizationUrl_returnUrl() throws Exception {
@@ -76,22 +81,25 @@ class GoogleOAuthControllerTest {
 
     @Test
     @WithMockFamily
-    void getStatus_connected_returnsTrue() throws Exception {
+    void getStatus_connected_returnsTrueWithCalendars() throws Exception {
         when(googleOAuthService.isConnected(MEMBER_ID)).thenReturn(true);
+        when(syncedCalendarRepository.findByMemberId(MEMBER_ID)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/google/status/{memberId}", MEMBER_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.connected").value(true));
+                .andExpect(jsonPath("$.data.connected").value(true))
+                .andExpect(jsonPath("$.data.calendars").isArray());
     }
 
     @Test
     @WithMockFamily
-    void getStatus_disconnected_returnsFalse() throws Exception {
+    void getStatus_disconnected_returnsFalseWithEmptyCalendars() throws Exception {
         when(googleOAuthService.isConnected(MEMBER_ID)).thenReturn(false);
 
         mockMvc.perform(get("/api/google/status/{memberId}", MEMBER_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.connected").value(false));
+                .andExpect(jsonPath("$.data.connected").value(false))
+                .andExpect(jsonPath("$.data.calendars").isEmpty());
     }
 
     @Test
