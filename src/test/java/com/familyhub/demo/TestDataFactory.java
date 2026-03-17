@@ -217,6 +217,7 @@ public final class TestDataFactory {
                 .isRecurring(false)
                 .source("NATIVE")
                 .description(null)
+                .htmlLink(null)
                 .build();
     }
 }

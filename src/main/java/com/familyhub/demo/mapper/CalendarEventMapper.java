@@ -57,6 +57,7 @@ public class CalendarEventMapper {
                         || calendarEvent.getRecurringEvent() != null)
                 .source(calendarEvent.getSource().name())
                 .description(calendarEvent.getDescription())
+                .htmlLink(calendarEvent.getHtmlLink())
                 .build();
     }
 
@@ -76,6 +77,7 @@ public class CalendarEventMapper {
                 .isRecurring(true)
                 .source(parent.getSource().name())
                 .description(parent.getDescription())
+                .htmlLink(parent.getHtmlLink())
                 .build();
     }
 
