@@ -36,6 +36,7 @@ class GoogleCalendarSyncServiceTest {
     @Mock
     private GoogleCredentialService credentialService;
 
+    @Spy
     @InjectMocks
     private GoogleCalendarSyncService syncService;
 
@@ -212,6 +213,32 @@ class GoogleCalendarSyncServiceTest {
                 ((java.util.List<?>) list).contains(mappedEntity)));
     }
 
+    @Test
+    void syncMember_allCalendarsFetchFail_doesNotDeleteExistingEvents() throws IOException {
+        GoogleSyncedCalendar cal1 = createSyncedCalendar("cal-1");
+        GoogleSyncedCalendar cal2 = createSyncedCalendar("cal-2");
+
+        when(syncedCalendarRepository.findByMemberIdAndEnabledTrue(member.getId()))
+                .thenReturn(java.util.List.of(cal1, cal2));
+
+        // Build a mock client where execute() throws IOException
+        com.google.api.services.calendar.model.Events dummyResponse = new com.google.api.services.calendar.model.Events();
+        dummyResponse.setItems(new ArrayList<>());
+        Calendar failClient = mockCalendarClient(dummyResponse);
+
+        // Re-stub execute to throw
+        Calendar.Events events = failClient.events();
+        List listRequest = events.list(anyString());
+        when(listRequest.execute()).thenThrow(new IOException("Token expired"));
+
+        doReturn(failClient).when(syncService).buildCalendarClient(member.getId());
+
+        syncService.syncMember(member.getId());
+
+        verify(calendarEventRepository, never()).deleteByMemberAndSource(any(), any());
+        verify(calendarEventRepository, never()).saveAll(any());
+    }
+
     // --- Helpers ---
 
     private Event createTimedGoogleEvent(String id, String summary, String startIso, String endIso) {
@@ -222,6 +249,16 @@ class GoogleCalendarSyncServiceTest {
         event.setStart(new EventDateTime().setDateTime(new DateTime(startIso)));
         event.setEnd(new EventDateTime().setDateTime(new DateTime(endIso)));
         return event;
+    }
+
+    private GoogleSyncedCalendar createSyncedCalendar(String googleCalId) {
+        GoogleSyncedCalendar cal = new GoogleSyncedCalendar();
+        cal.setId(UUID.randomUUID());
+        cal.setMember(member);
+        cal.setToken(syncedCal.getToken());
+        cal.setGoogleCalendarId(googleCalId);
+        cal.setEnabled(true);
+        return cal;
     }
 
     private Calendar mockCalendarClient(com.google.api.services.calendar.model.Events response) throws IOException {

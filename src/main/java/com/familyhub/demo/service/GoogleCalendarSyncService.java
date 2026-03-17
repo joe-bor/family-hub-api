@@ -40,25 +40,26 @@ public class GoogleCalendarSyncService {
             return;
         }
 
-        Credential credential = credentialService.getCredential(memberId);
-        Calendar calendarClient = new Calendar.Builder(
-                credentialService.getHttpTransport(),
-                credentialService.getJsonFactory(),
-                credential)
-                .setApplicationName("FamilyHub")
-                .build();
+        Calendar calendarClient = buildCalendarClient(memberId);
 
         FamilyMember member = calendars.getFirst().getMember();
 
         // Fetch events from all calendars first
         List<Event> allEvents = new ArrayList<>();
+        int successCount = 0;
         for (GoogleSyncedCalendar cal : calendars) {
             try {
                 allEvents.addAll(fetchAllEvents(cal, calendarClient));
+                successCount++;
             } catch (IOException e) {
                 log.error("Failed to fetch events from calendar {} for member {}: {}",
                         cal.getGoogleCalendarId(), memberId, e.getMessage());
             }
+        }
+
+        if (successCount == 0) {
+            log.error("All calendar fetches failed for member {}, skipping sync to preserve existing events", memberId);
+            return;
         }
 
         // Single delete for the member, then bulk insert
@@ -71,6 +72,20 @@ public class GoogleCalendarSyncService {
             cal.setLastSyncedAt(now);
             syncedCalendarRepository.save(cal);
         }
+    }
+
+    /**
+     * Builds a Google Calendar API client for the given member.
+     * Package-private for test spying.
+     */
+    Calendar buildCalendarClient(UUID memberId) {
+        Credential credential = credentialService.getCredential(memberId);
+        return new Calendar.Builder(
+                credentialService.getHttpTransport(),
+                credentialService.getJsonFactory(),
+                credential)
+                .setApplicationName("FamilyHub")
+                .build();
     }
 
     /**
