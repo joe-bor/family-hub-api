@@ -2,12 +2,14 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.dto.GoogleCalendarInfo;
 import com.familyhub.demo.dto.GoogleCalendarResponse;
+import com.familyhub.demo.event.SyncRequestedEvent;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.model.GoogleOAuthToken;
 import com.familyhub.demo.model.GoogleSyncedCalendar;
 import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
 import com.familyhub.demo.repository.GoogleSyncedCalendarRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +24,7 @@ public class GoogleCalendarSelectionService {
     private final GoogleOAuthTokenRepository tokenRepository;
     private final GoogleSyncedCalendarRepository syncedCalendarRepository;
     private final GoogleCalendarListService calendarListService;
-    private final GoogleCalendarSyncService syncService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public List<GoogleCalendarResponse> listCalendarsWithSelections(UUID memberId) {
         tokenRepository.findByMemberId(memberId)
@@ -84,7 +86,7 @@ public class GoogleCalendarSelectionService {
             response.add(new GoogleCalendarResponse(cal.id(), cal.name(), cal.primary(), shouldEnable));
         }
 
-        syncService.syncMember(memberId);
+        eventPublisher.publishEvent(new SyncRequestedEvent(memberId));
 
         return response;
     }

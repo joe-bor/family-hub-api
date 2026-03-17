@@ -10,10 +10,16 @@ import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.Event;
 import com.google.api.services.calendar.model.Events;
+import com.familyhub.demo.event.SyncRequestedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -32,8 +38,19 @@ public class GoogleCalendarSyncService {
     private final GoogleEventMapper googleEventMapper;
     private final GoogleCredentialService credentialService;
 
+    @Lazy
+    @Autowired
+    private GoogleCalendarSyncService self;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onSyncRequested(SyncRequestedEvent event) {
+        self.syncMember(event.memberId());
+    }
+
+    @Async
     @Transactional
     public void syncMember(UUID memberId) {
+        log.info("Starting async sync for member {}", memberId);
         List<GoogleSyncedCalendar> calendars = syncedCalendarRepository.findByMemberIdAndEnabledTrue(memberId);
         if (calendars.isEmpty()) {
             log.info("No enabled calendars for member {}, skipping sync", memberId);
