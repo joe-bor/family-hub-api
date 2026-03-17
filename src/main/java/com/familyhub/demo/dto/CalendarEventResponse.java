@@ -23,7 +23,8 @@ public record CalendarEventResponse(
         UUID recurringEventId,
         boolean isRecurring,
         String source,
-        String description
+        String description,
+        String htmlLink
 ) {
 
 }
