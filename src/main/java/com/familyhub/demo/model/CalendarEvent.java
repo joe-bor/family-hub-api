@@ -6,6 +6,7 @@ import lombok.Setter;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.UUID;
@@ -62,4 +63,16 @@ public class CalendarEvent {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "google_event_id", length = 1024)
+    private String googleEventId;
+
+    @Column(name = "html_link", length = 2048)
+    private String htmlLink;
+
+    @Column(length = 255)
+    private String etag;
+
+    @Column(name = "google_updated_at")
+    private Instant googleUpdatedAt;
 }
