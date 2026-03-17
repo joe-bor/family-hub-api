@@ -10,7 +10,8 @@ import java.util.UUID;
 @Entity
 @Getter
 @Setter
-@Table(name = "google_synced_calendar")
+@Table(name = "google_synced_calendar",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"member_id", "google_calendar_id"}))
 public class GoogleSyncedCalendar {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

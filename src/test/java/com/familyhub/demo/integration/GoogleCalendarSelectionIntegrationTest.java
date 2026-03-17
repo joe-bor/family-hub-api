@@ -154,6 +154,16 @@ class GoogleCalendarSelectionIntegrationTest {
                 .andExpect(jsonPath("$.data.calendars").isEmpty());
     }
 
+    @Test
+    void duplicateMemberAndCalendarId_violatesUniqueConstraint() throws Exception {
+        insertSyncedCalendar("primary", "Joe's Calendar", true);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                insertSyncedCalendar("primary", "Joe's Calendar", true)
+        ).isInstanceOf(org.postgresql.util.PSQLException.class)
+                .hasMessageContaining("uq_synced_calendar_member_google_id");
+    }
+
     private void insertSyncedCalendar(String googleCalendarId, String name, boolean enabled) throws Exception {
         try (var conn = dataSource.getConnection();
              var stmt = conn.prepareStatement(
