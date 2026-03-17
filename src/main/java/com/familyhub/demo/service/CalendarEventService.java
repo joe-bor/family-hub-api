@@ -13,6 +13,7 @@ import com.familyhub.demo.repository.CalendarEventRepository;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import net.fortuna.ical4j.model.Recur;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -99,7 +101,12 @@ public class CalendarEventService {
             // 4. Expand each parent
             for (CalendarEvent parent : parents) {
                 Map<LocalDate, CalendarEvent> exceptions = exceptionsByParent.getOrDefault(parent.getId(), Map.of());
-                expanded.addAll(recurrenceExpander.expand(parent, rangeStart, rangeEnd, exceptions));
+                try {
+                    expanded.addAll(recurrenceExpander.expand(parent, rangeStart, rangeEnd, exceptions));
+                } catch (Exception e) {
+                    log.warn("Failed to expand recurring event {} (rule: {}): {}",
+                            parent.getId(), parent.getRecurrenceRule(), e.getMessage());
+                }
             }
         }
 
