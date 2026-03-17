@@ -5,7 +5,6 @@ import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.model.GoogleOAuthToken;
 import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
 import com.google.api.client.auth.oauth2.Credential;
-import com.google.api.client.auth.oauth2.TokenResponse;
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.HttpTransport;

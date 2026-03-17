@@ -33,7 +33,11 @@ public class GoogleCalendarListService {
 
         try {
             CalendarList calendarList = calendarClient.calendarList().list().execute();
-            return calendarList.getItems().stream()
+            List<CalendarListEntry> items = calendarList.getItems();
+            if (items == null) {
+                return List.of();
+            }
+            return items.stream()
                     .map(this::toCalendarInfo)
                     .toList();
         } catch (IOException e) {
