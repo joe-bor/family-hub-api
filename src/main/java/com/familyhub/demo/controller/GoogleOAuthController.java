@@ -5,8 +5,6 @@ import com.familyhub.demo.dto.ApiResponse;
 import com.familyhub.demo.dto.GoogleConnectionStatus;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.model.Family;
-import com.familyhub.demo.model.GoogleSyncedCalendar;
-import com.familyhub.demo.repository.GoogleSyncedCalendarRepository;
 import com.familyhub.demo.service.FamilyMemberService;
 import com.familyhub.demo.service.GoogleOAuthService;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +14,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,7 +25,6 @@ public class GoogleOAuthController {
     private final GoogleOAuthService googleOAuthService;
     private final GoogleOAuthConfig googleOAuthConfig;
     private final FamilyMemberService familyMemberService;
-    private final GoogleSyncedCalendarRepository syncedCalendarRepository;
 
     @GetMapping("/auth")
     public ResponseEntity<ApiResponse<Map<String, String>>> getAuthorizationUrl(
@@ -88,20 +84,7 @@ public class GoogleOAuthController {
             @AuthenticationPrincipal Family family) {
         familyMemberService.findById(family, memberId);
 
-        boolean connected = googleOAuthService.isConnected(memberId);
-
-        List<GoogleConnectionStatus.SyncedCalendarInfo> calendars = connected
-                ? syncedCalendarRepository.findByMemberId(memberId).stream()
-                    .map(sc -> new GoogleConnectionStatus.SyncedCalendarInfo(
-                            sc.getGoogleCalendarId(),
-                            sc.getCalendarName(),
-                            sc.isEnabled(),
-                            sc.getLastSyncedAt()))
-                    .toList()
-                : List.of();
-
-        return ResponseEntity.ok(new ApiResponse<>(
-                new GoogleConnectionStatus(connected, calendars),
-                null));
+        GoogleConnectionStatus status = googleOAuthService.getConnectionStatus(memberId);
+        return ResponseEntity.ok(new ApiResponse<>(status, null));
     }
 }

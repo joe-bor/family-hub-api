@@ -2,7 +2,7 @@ package com.familyhub.demo.controller;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.config.SecurityConfig;
-import com.familyhub.demo.repository.GoogleSyncedCalendarRepository;
+import com.familyhub.demo.dto.GoogleConnectionStatus;
 import com.familyhub.demo.security.JwtAuthenticationEntryPoint;
 import com.familyhub.demo.security.JwtAuthenticationFilter;
 import com.familyhub.demo.security.WithMockFamily;
@@ -54,9 +54,6 @@ class GoogleOAuthControllerTest {
     @MockitoBean
     private GoogleOAuthConfig googleOAuthConfig;
 
-    @MockitoBean
-    private GoogleSyncedCalendarRepository syncedCalendarRepository;
-
     @Test
     @WithMockFamily
     void getAuthorizationUrl_returnUrl() throws Exception {
@@ -82,8 +79,8 @@ class GoogleOAuthControllerTest {
     @Test
     @WithMockFamily
     void getStatus_connected_returnsTrueWithCalendars() throws Exception {
-        when(googleOAuthService.isConnected(MEMBER_ID)).thenReturn(true);
-        when(syncedCalendarRepository.findByMemberId(MEMBER_ID)).thenReturn(List.of());
+        when(googleOAuthService.getConnectionStatus(MEMBER_ID))
+                .thenReturn(new GoogleConnectionStatus(true, List.of()));
 
         mockMvc.perform(get("/api/google/status/{memberId}", MEMBER_ID))
                 .andExpect(status().isOk())
@@ -94,7 +91,8 @@ class GoogleOAuthControllerTest {
     @Test
     @WithMockFamily
     void getStatus_disconnected_returnsFalseWithEmptyCalendars() throws Exception {
-        when(googleOAuthService.isConnected(MEMBER_ID)).thenReturn(false);
+        when(googleOAuthService.getConnectionStatus(MEMBER_ID))
+                .thenReturn(new GoogleConnectionStatus(false, List.of()));
 
         mockMvc.perform(get("/api/google/status/{memberId}", MEMBER_ID))
                 .andExpect(status().isOk())
