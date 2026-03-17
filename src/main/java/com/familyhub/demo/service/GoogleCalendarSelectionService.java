@@ -22,6 +22,7 @@ public class GoogleCalendarSelectionService {
     private final GoogleOAuthTokenRepository tokenRepository;
     private final GoogleSyncedCalendarRepository syncedCalendarRepository;
     private final GoogleCalendarListService calendarListService;
+    private final GoogleCalendarSyncService syncService;
 
     public List<GoogleCalendarResponse> listCalendarsWithSelections(UUID memberId) {
         tokenRepository.findByMemberId(memberId)
@@ -82,6 +83,8 @@ public class GoogleCalendarSelectionService {
 
             response.add(new GoogleCalendarResponse(cal.id(), cal.name(), cal.primary(), shouldEnable));
         }
+
+        syncService.syncMember(memberId);
 
         return response;
     }
