@@ -1,6 +1,7 @@
 package com.familyhub.demo.service;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
+import com.familyhub.demo.dto.GoogleConnectionStatus;
 import com.familyhub.demo.dto.GoogleTokenResponse;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
@@ -20,6 +21,7 @@ import org.springframework.web.client.RestClient;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -157,6 +159,22 @@ public class GoogleOAuthService {
 
     public boolean isConnected(UUID memberId) {
         return tokenRepository.findByMemberId(memberId).isPresent();
+    }
+
+    public GoogleConnectionStatus getConnectionStatus(UUID memberId) {
+        boolean connected = isConnected(memberId);
+
+        List<GoogleConnectionStatus.SyncedCalendarInfo> calendars = connected
+                ? syncedCalendarRepository.findByMemberId(memberId).stream()
+                    .map(sc -> new GoogleConnectionStatus.SyncedCalendarInfo(
+                            sc.getGoogleCalendarId(),
+                            sc.getCalendarName(),
+                            sc.isEnabled(),
+                            sc.getLastSyncedAt()))
+                    .toList()
+                : List.of();
+
+        return new GoogleConnectionStatus(connected, calendars);
     }
 
     private static String encode(String value) {
