@@ -190,6 +190,28 @@ class GoogleCalendarSyncServiceTest {
         verifyNoInteractions(credentialService);
     }
 
+    @Test
+    void fullSync_singleCalendar_deletesOnceAndInserts() throws IOException {
+        // Verify fullSync for a single calendar does one delete + insert
+        Event eventA = createTimedGoogleEvent("event-a", "Meeting",
+                "2025-06-15T09:00:00-04:00", "2025-06-15T10:00:00-04:00");
+
+        com.google.api.services.calendar.model.Events response = new com.google.api.services.calendar.model.Events();
+        response.setItems(java.util.List.of(eventA));
+        response.setNextSyncToken("token-a");
+
+        Calendar calendarClient = mockCalendarClient(response);
+
+        CalendarEvent mappedEntity = new CalendarEvent();
+        when(googleEventMapper.toEntity(eq(eventA), eq(syncedCal))).thenReturn(mappedEntity);
+
+        syncService.fullSync(syncedCal, calendarClient);
+
+        verify(calendarEventRepository, times(1)).deleteByMemberAndSource(member, EventSource.GOOGLE);
+        verify(calendarEventRepository).saveAll(argThat(list ->
+                ((java.util.List<?>) list).contains(mappedEntity)));
+    }
+
     // --- Helpers ---
 
     private Event createTimedGoogleEvent(String id, String summary, String startIso, String endIso) {
