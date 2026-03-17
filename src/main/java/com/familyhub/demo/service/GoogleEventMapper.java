@@ -1,0 +1,120 @@
+package com.familyhub.demo.service;
+
+import com.familyhub.demo.model.CalendarEvent;
+import com.familyhub.demo.model.EventSource;
+import com.familyhub.demo.model.GoogleSyncedCalendar;
+import com.google.api.client.util.DateTime;
+import com.google.api.services.calendar.model.Event;
+import com.google.api.services.calendar.model.EventDateTime;
+import org.springframework.stereotype.Component;
+
+import java.time.*;
+
+@Component
+public class GoogleEventMapper {
+
+    public CalendarEvent toEntity(Event googleEvent, GoogleSyncedCalendar syncedCal) {
+        CalendarEvent entity = new CalendarEvent();
+        mapCommonFields(googleEvent, syncedCal, entity);
+        mapDateAndTime(googleEvent, entity);
+
+        if (googleEvent.getRecurrence() != null && !googleEvent.getRecurrence().isEmpty()) {
+            String rrule = googleEvent.getRecurrence().stream()
+                    .filter(r -> r.startsWith("RRULE:"))
+                    .findFirst()
+                    .map(r -> r.substring("RRULE:".length()))
+                    .orElse(null);
+            entity.setRecurrenceRule(rrule);
+        }
+
+        return entity;
+    }
+
+    public CalendarEvent toExceptionEntity(Event googleEvent, GoogleSyncedCalendar syncedCal,
+                                            CalendarEvent parentEntity) {
+        CalendarEvent entity = new CalendarEvent();
+        mapCommonFields(googleEvent, syncedCal, entity);
+
+        // Cancelled events may lack start/end — use parent's time fields as fallback
+        if (googleEvent.getStart() != null && googleEvent.getEnd() != null) {
+            mapDateAndTime(googleEvent, entity);
+        } else {
+            // Fallback for cancelled exceptions: use originalDate + parent's times
+            entity.setDate(parseOriginalDate(googleEvent));
+            entity.setStartTime(parentEntity.getStartTime());
+            entity.setEndTime(parentEntity.getEndTime());
+            entity.setAllDay(parentEntity.isAllDay());
+        }
+
+        entity.setRecurringEvent(parentEntity);
+        entity.setOriginalDate(parseOriginalDate(googleEvent));
+        entity.setCancelled("cancelled".equals(googleEvent.getStatus()));
+
+        return entity;
+    }
+
+    private void mapCommonFields(Event googleEvent, GoogleSyncedCalendar syncedCal,
+                                  CalendarEvent entity) {
+        String title = googleEvent.getSummary();
+        entity.setTitle(title != null ? title : "(No title)");
+        entity.setDescription(googleEvent.getDescription());
+        entity.setLocation(googleEvent.getLocation());
+        entity.setHtmlLink(googleEvent.getHtmlLink());
+        entity.setGoogleEventId(googleEvent.getId());
+        entity.setEtag(googleEvent.getEtag());
+        entity.setSource(EventSource.GOOGLE);
+        entity.setMember(syncedCal.getMember());
+        entity.setFamily(syncedCal.getMember().getFamily());
+
+        if (googleEvent.getUpdated() != null) {
+            entity.setGoogleUpdatedAt(Instant.ofEpochMilli(googleEvent.getUpdated().getValue()));
+        }
+    }
+
+    private void mapDateAndTime(Event googleEvent, CalendarEvent entity) {
+        EventDateTime start = googleEvent.getStart();
+        EventDateTime end = googleEvent.getEnd();
+
+        if (start.getDate() != null) {
+            // All-day event
+            entity.setAllDay(true);
+            LocalDate startDate = parseLocalDate(start.getDate());
+            entity.setDate(startDate);
+            entity.setStartTime(LocalTime.MIDNIGHT);
+            entity.setEndTime(LocalTime.MIDNIGHT);
+
+            // Google end date is exclusive, ours is inclusive
+            LocalDate googleEndDate = parseLocalDate(end.getDate());
+            LocalDate inclusiveEndDate = googleEndDate.minusDays(1);
+            if (inclusiveEndDate.isAfter(startDate)) {
+                entity.setEndDate(inclusiveEndDate);
+            }
+            // Single-day: endDate stays null
+        } else {
+            // Timed event
+            entity.setAllDay(false);
+            ZonedDateTime startZdt = toZonedDateTime(start.getDateTime());
+            ZonedDateTime endZdt = toZonedDateTime(end.getDateTime());
+            entity.setDate(startZdt.toLocalDate());
+            entity.setStartTime(startZdt.toLocalTime());
+            entity.setEndTime(endZdt.toLocalTime());
+        }
+    }
+
+    private LocalDate parseOriginalDate(Event googleEvent) {
+        EventDateTime original = googleEvent.getOriginalStartTime();
+        if (original.getDate() != null) {
+            return parseLocalDate(original.getDate());
+        }
+        return toZonedDateTime(original.getDateTime()).toLocalDate();
+    }
+
+    private LocalDate parseLocalDate(DateTime googleDate) {
+        return LocalDate.parse(googleDate.toStringRfc3339());
+    }
+
+    private ZonedDateTime toZonedDateTime(DateTime googleDateTime) {
+        return Instant.ofEpochMilli(googleDateTime.getValue())
+                .atZone(ZoneOffset.ofTotalSeconds(googleDateTime.getTimeZoneShift() * 60));
+    }
+}
