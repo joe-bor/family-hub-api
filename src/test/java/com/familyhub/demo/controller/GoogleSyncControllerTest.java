@@ -48,10 +48,10 @@ class GoogleSyncControllerTest {
 
     @Test
     @WithMockFamily
-    void syncMember_returns200() throws Exception {
+    void syncMember_returns202() throws Exception {
         mockMvc.perform(post("/api/google/sync/{memberId}", MEMBER_ID))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("Sync completed"));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message").value("Sync started"));
 
         verify(familyMemberService).findById(any(), eq(MEMBER_ID));
         verify(syncService).syncMember(MEMBER_ID);

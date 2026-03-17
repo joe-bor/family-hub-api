@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+// TODO: Add rate limiting or cooldown check (e.g., reject sync if lastSyncedAt < 60s ago)
+//  to prevent excessive Google API calls and database churn from rapid-fire requests.
 @RestController
 @RequestMapping("/api/google/sync")
 @RequiredArgsConstructor
@@ -25,6 +27,6 @@ public class GoogleSyncController {
         familyMemberService.findById(family, memberId);
 
         syncService.syncMember(memberId);
-        return ResponseEntity.ok(new ApiResponse<>(null, "Sync completed"));
+        return ResponseEntity.accepted().body(new ApiResponse<>(null, "Sync started"));
     }
 }
