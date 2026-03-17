@@ -1,7 +1,9 @@
 package com.familyhub.demo.dto;
 
+import jakarta.validation.constraints.NotNull;
+
 import java.util.List;
 
 public record CalendarSelectionRequest(
-        List<String> calendarIds
+        @NotNull List<String> calendarIds
 ) {}
