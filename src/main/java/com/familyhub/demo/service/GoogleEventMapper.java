@@ -92,6 +92,8 @@ public class GoogleEventMapper {
             // Single-day: endDate stays null
         } else {
             // Timed event
+            // TODO: Events crossing midnight (e.g., 11 PM → 1 AM) will have endTime < startTime
+            // with no endDate set. This may confuse query/rendering. Rare edge case for Phase 1.
             entity.setAllDay(false);
             ZonedDateTime startZdt = toZonedDateTime(start.getDateTime());
             ZonedDateTime endZdt = toZonedDateTime(end.getDateTime());
