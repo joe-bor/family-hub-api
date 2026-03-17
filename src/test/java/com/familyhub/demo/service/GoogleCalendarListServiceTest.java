@@ -93,4 +93,47 @@ class GoogleCalendarListServiceTest {
         assertThat(family.name()).isEqualTo("Family");
         assertThat(family.primary()).isFalse();
     }
+
+    @Test
+    void listCalendars_emptyResponse_returnsEmptyList() {
+        UUID memberId = UUID.randomUUID();
+
+        String jsonResponse = """
+                {
+                  "kind": "calendar#calendarList"
+                }
+                """;
+
+        HttpTransport transport = new MockHttpTransport() {
+            @Override
+            public LowLevelHttpRequest buildRequest(String method, String url) {
+                return new MockLowLevelHttpRequest() {
+                    @Override
+                    public LowLevelHttpResponse execute() {
+                        MockLowLevelHttpResponse response = new MockLowLevelHttpResponse();
+                        response.setContentType("application/json");
+                        response.setContent(jsonResponse);
+                        return response;
+                    }
+                };
+            }
+        };
+
+        JsonFactory jsonFactory = GsonFactory.getDefaultInstance();
+
+        Credential credential = new Credential.Builder(BearerToken.authorizationHeaderAccessMethod())
+                .setTransport(transport)
+                .setJsonFactory(jsonFactory)
+                .build();
+        credential.setAccessToken("fake-token");
+
+        when(credentialService.getCredential(memberId)).thenReturn(credential);
+        when(credentialService.getHttpTransport()).thenReturn(transport);
+        when(credentialService.getJsonFactory()).thenReturn(jsonFactory);
+
+        GoogleCalendarListService service = new GoogleCalendarListService(credentialService);
+        List<GoogleCalendarInfo> calendars = service.listCalendars(memberId);
+
+        assertThat(calendars).isEmpty();
+    }
 }
