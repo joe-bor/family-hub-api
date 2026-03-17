@@ -36,6 +36,9 @@ class GoogleCalendarSelectionServiceTest {
     @Mock
     private GoogleCalendarListService calendarListService;
 
+    @Mock
+    private GoogleCalendarSyncService syncService;
+
     @InjectMocks
     private GoogleCalendarSelectionService selectionService;
 
