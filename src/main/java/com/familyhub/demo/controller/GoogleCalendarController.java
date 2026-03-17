@@ -6,6 +6,7 @@ import com.familyhub.demo.dto.GoogleCalendarResponse;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.service.FamilyMemberService;
 import com.familyhub.demo.service.GoogleCalendarSelectionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,7 +35,7 @@ public class GoogleCalendarController {
     @PutMapping("/{memberId}")
     public ResponseEntity<ApiResponse<List<GoogleCalendarResponse>>> updateSelection(
             @PathVariable UUID memberId,
-            @RequestBody CalendarSelectionRequest request,
+            @Valid @RequestBody CalendarSelectionRequest request,
             @AuthenticationPrincipal Family family) {
         familyMemberService.findById(family, memberId);
 
