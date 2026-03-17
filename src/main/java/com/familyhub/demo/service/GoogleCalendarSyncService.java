@@ -63,42 +63,7 @@ public class GoogleCalendarSyncService {
 
         // Single delete for the member, then bulk insert
         calendarEventRepository.deleteByMemberAndSource(member, EventSource.GOOGLE);
-
-        // Separate parents/regular from exceptions
-        List<Event> parentsAndRegular = allEvents.stream()
-                .filter(e -> e.getRecurringEventId() == null)
-                .filter(e -> !"cancelled".equals(e.getStatus()))
-                .toList();
-
-        List<Event> exceptions = allEvents.stream()
-                .filter(e -> e.getRecurringEventId() != null)
-                .toList();
-
-        // Save parents/regular first — need to resolve which syncedCal each event came from
-        List<CalendarEvent> parentEntities = new ArrayList<>();
-        for (Event event : parentsAndRegular) {
-            GoogleSyncedCalendar syncedCal = resolveCalendar(event, calendars);
-            parentEntities.add(googleEventMapper.toEntity(event, syncedCal));
-        }
-        calendarEventRepository.saveAll(parentEntities);
-        calendarEventRepository.flush();
-
-        // Save exceptions
-        for (Event exception : exceptions) {
-            String googleParentId = exception.getRecurringEventId();
-            Optional<CalendarEvent> parentEntity = calendarEventRepository.findByGoogleEventId(googleParentId);
-
-            if (parentEntity.isEmpty()) {
-                log.warn("Orphaned exception {} — parent {} not found, skipping",
-                        exception.getId(), googleParentId);
-                continue;
-            }
-
-            GoogleSyncedCalendar syncedCal = resolveCalendar(exception, calendars);
-            CalendarEvent exceptionEntity = googleEventMapper.toExceptionEntity(
-                    exception, syncedCal, parentEntity.get());
-            calendarEventRepository.save(exceptionEntity);
-        }
+        saveGoogleEvents(allEvents, calendars);
 
         // Update sync metadata on all calendars
         Instant now = Instant.now();
@@ -118,36 +83,7 @@ public class GoogleCalendarSyncService {
             List<Event> allEvents = fetchAllEvents(syncedCal, calendarClient);
 
             calendarEventRepository.deleteByMemberAndSource(syncedCal.getMember(), EventSource.GOOGLE);
-
-            List<Event> parentsAndRegular = allEvents.stream()
-                    .filter(e -> e.getRecurringEventId() == null)
-                    .filter(e -> !"cancelled".equals(e.getStatus()))
-                    .toList();
-
-            List<Event> exceptions = allEvents.stream()
-                    .filter(e -> e.getRecurringEventId() != null)
-                    .toList();
-
-            List<CalendarEvent> parentEntities = parentsAndRegular.stream()
-                    .map(e -> googleEventMapper.toEntity(e, syncedCal))
-                    .toList();
-            calendarEventRepository.saveAll(parentEntities);
-            calendarEventRepository.flush();
-
-            for (Event exception : exceptions) {
-                String googleParentId = exception.getRecurringEventId();
-                Optional<CalendarEvent> parentEntity = calendarEventRepository.findByGoogleEventId(googleParentId);
-
-                if (parentEntity.isEmpty()) {
-                    log.warn("Orphaned exception {} — parent {} not found, skipping",
-                            exception.getId(), googleParentId);
-                    continue;
-                }
-
-                CalendarEvent exceptionEntity = googleEventMapper.toExceptionEntity(
-                        exception, syncedCal, parentEntity.get());
-                calendarEventRepository.save(exceptionEntity);
-            }
+            saveGoogleEvents(allEvents, List.of(syncedCal));
 
             syncedCal.setLastSyncedAt(Instant.now());
             syncedCalendarRepository.save(syncedCal);
@@ -156,6 +92,45 @@ public class GoogleCalendarSyncService {
             log.error("Failed to sync calendar {} for member {}: {}",
                     syncedCal.getGoogleCalendarId(), syncedCal.getMember().getId(), e.getMessage());
             throw new RuntimeException("Google Calendar sync failed", e);
+        }
+    }
+
+    /**
+     * Saves Google events: parents/regular first (flush), then exceptions.
+     * Cancelled non-recurring events and orphaned exceptions are skipped.
+     */
+    private void saveGoogleEvents(List<Event> allEvents, List<GoogleSyncedCalendar> calendars) {
+        List<Event> parentsAndRegular = allEvents.stream()
+                .filter(e -> e.getRecurringEventId() == null)
+                .filter(e -> !"cancelled".equals(e.getStatus()))
+                .toList();
+
+        List<Event> exceptions = allEvents.stream()
+                .filter(e -> e.getRecurringEventId() != null)
+                .toList();
+
+        List<CalendarEvent> parentEntities = new ArrayList<>();
+        for (Event event : parentsAndRegular) {
+            GoogleSyncedCalendar syncedCal = resolveCalendar(event, calendars);
+            parentEntities.add(googleEventMapper.toEntity(event, syncedCal));
+        }
+        calendarEventRepository.saveAll(parentEntities);
+        calendarEventRepository.flush();
+
+        for (Event exception : exceptions) {
+            String googleParentId = exception.getRecurringEventId();
+            Optional<CalendarEvent> parentEntity = calendarEventRepository.findByGoogleEventId(googleParentId);
+
+            if (parentEntity.isEmpty()) {
+                log.warn("Orphaned exception {} — parent {} not found, skipping",
+                        exception.getId(), googleParentId);
+                continue;
+            }
+
+            GoogleSyncedCalendar syncedCal = resolveCalendar(exception, calendars);
+            CalendarEvent exceptionEntity = googleEventMapper.toExceptionEntity(
+                    exception, syncedCal, parentEntity.get());
+            calendarEventRepository.save(exceptionEntity);
         }
     }
 
@@ -187,10 +162,12 @@ public class GoogleCalendarSyncService {
      * Google events don't carry which calendar they came from, but all calendars
      * belong to the same member, so the mapping uses the same member/family.
      * Use the first calendar as the default.
+     *
+     * TODO: Track which calendar each event came from (e.g., Map<Event, GoogleSyncedCalendar>
+     *  during fetch). Needed for per-calendar delete on disable, calendar color/name per event,
+     *  and accurate per-calendar sync token tracking. Will be addressed with incremental sync.
      */
     private GoogleSyncedCalendar resolveCalendar(Event event, List<GoogleSyncedCalendar> calendars) {
-        // All calendars belong to the same member, so the mapping result is identical.
-        // The syncedCal is only used for member/family references.
         return calendars.getFirst();
     }
 }
