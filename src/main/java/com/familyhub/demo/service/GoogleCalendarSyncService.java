@@ -176,6 +176,34 @@ public class GoogleCalendarSyncService {
         }
     }
 
+    /**
+     * Fetches only events that changed since last sync using Google's sync token.
+     * Does NOT use setSingleEvents or setMaxResults — incompatible with sync tokens.
+     * Package-private for test access.
+     */
+    List<Event> fetchIncrementalEvents(GoogleSyncedCalendar syncedCal, Calendar calendarClient) throws IOException {
+        String pageToken = null;
+        List<Event> changedEvents = new ArrayList<>();
+
+        do {
+            Events response = calendarClient.events().list(syncedCal.getGoogleCalendarId())
+                    .setSyncToken(syncedCal.getSyncToken())
+                    .setPageToken(pageToken)
+                    .execute();
+
+            if (response.getItems() != null) {
+                changedEvents.addAll(response.getItems());
+            }
+            pageToken = response.getNextPageToken();
+
+            if (pageToken == null && response.getNextSyncToken() != null) {
+                syncedCal.setSyncToken(response.getNextSyncToken());
+            }
+        } while (pageToken != null);
+
+        return changedEvents;
+    }
+
     private List<Event> fetchAllEvents(GoogleSyncedCalendar syncedCal, Calendar calendarClient) throws IOException {
         String pageToken = null;
         List<Event> allEvents = new ArrayList<>();
