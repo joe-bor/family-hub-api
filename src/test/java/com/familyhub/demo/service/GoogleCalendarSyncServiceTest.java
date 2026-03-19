@@ -357,6 +357,115 @@ class GoogleCalendarSyncServiceTest {
         verify(syncedCalendarRepository).save(syncedCal);
     }
 
+    @Test
+    void persistIncrementalChanges_updatedEvent_copiesFieldsOntoExisting() {
+        Event updatedGoogleEvent = createTimedGoogleEvent("existing-evt-1", "Updated Title",
+                "2025-06-16T10:00:00-04:00", "2025-06-16T11:00:00-04:00");
+
+        CalendarEvent existingEntity = new CalendarEvent();
+        existingEntity.setId(UUID.randomUUID());
+        existingEntity.setGoogleEventId("existing-evt-1");
+        existingEntity.setTitle("Old Title");
+
+        CalendarEvent mappedEntity = new CalendarEvent();
+        mappedEntity.setTitle("Updated Title");
+
+        when(googleEventMapper.toEntity(eq(updatedGoogleEvent), eq(syncedCal))).thenReturn(mappedEntity);
+        when(calendarEventRepository.findByGoogleEventId("existing-evt-1")).thenReturn(Optional.of(existingEntity));
+
+        syncService.persistIncrementalChanges(syncedCal, java.util.List.of(updatedGoogleEvent));
+
+        assertThat(existingEntity.getTitle()).isEqualTo("Updated Title");
+        verify(calendarEventRepository).save(existingEntity);
+    }
+
+    @Test
+    void persistIncrementalChanges_cancelledParent_deletesEvent() {
+        Event cancelledEvent = createTimedGoogleEvent("cancel-evt-1", "Cancelled",
+                "2025-06-15T09:00:00-04:00", "2025-06-15T10:00:00-04:00");
+        cancelledEvent.setStatus("cancelled");
+
+        syncService.persistIncrementalChanges(syncedCal, java.util.List.of(cancelledEvent));
+
+        verify(calendarEventRepository).deleteByGoogleEventId("cancel-evt-1");
+        verify(googleEventMapper, never()).toEntity(any(), any());
+    }
+
+    @Test
+    void persistIncrementalChanges_cancelledException_isUpserted() {
+        Event cancelledException = createTimedGoogleEvent("exc-cancel-1", "Cancelled Instance",
+                "2025-06-15T09:00:00-04:00", "2025-06-15T10:00:00-04:00");
+        cancelledException.setStatus("cancelled");
+        cancelledException.setRecurringEventId("parent-1");
+        cancelledException.setOriginalStartTime(new EventDateTime()
+                .setDateTime(new DateTime("2025-06-15T09:00:00-04:00")));
+
+        CalendarEvent parentEntity = new CalendarEvent();
+        parentEntity.setId(UUID.randomUUID());
+        when(calendarEventRepository.findByGoogleEventId("parent-1")).thenReturn(Optional.of(parentEntity));
+
+        CalendarEvent mappedEntity = new CalendarEvent();
+        mappedEntity.setCancelled(true);
+        when(googleEventMapper.toExceptionEntity(eq(cancelledException), eq(syncedCal), eq(parentEntity)))
+                .thenReturn(mappedEntity);
+        when(calendarEventRepository.findByGoogleEventId("exc-cancel-1")).thenReturn(Optional.empty());
+
+        syncService.persistIncrementalChanges(syncedCal, java.util.List.of(cancelledException));
+
+        verify(calendarEventRepository).save(mappedEntity);
+        verify(calendarEventRepository, never()).deleteByGoogleEventId("exc-cancel-1");
+    }
+
+    @Test
+    void persistIncrementalChanges_orphanedException_isSkipped() {
+        Event orphanedException = createTimedGoogleEvent("orphan-exc-1", "Orphan",
+                "2025-06-15T09:00:00-04:00", "2025-06-15T10:00:00-04:00");
+        orphanedException.setRecurringEventId("missing-parent");
+        orphanedException.setOriginalStartTime(new EventDateTime()
+                .setDateTime(new DateTime("2025-06-15T09:00:00-04:00")));
+
+        when(calendarEventRepository.findByGoogleEventId("missing-parent")).thenReturn(Optional.empty());
+
+        syncService.persistIncrementalChanges(syncedCal, java.util.List.of(orphanedException));
+
+        verify(googleEventMapper, never()).toExceptionEntity(any(), any(), any());
+    }
+
+    @Test
+    void persistIncrementalChanges_parentsProcessedBeforeExceptions() {
+        Event parentEvent = createTimedGoogleEvent("parent-1", "Parent",
+                "2025-06-15T09:00:00-04:00", "2025-06-15T10:00:00-04:00");
+        parentEvent.setRecurrence(java.util.List.of("RRULE:FREQ=WEEKLY"));
+
+        Event exceptionEvent = createTimedGoogleEvent("parent-1_20250622", "Exception",
+                "2025-06-22T10:00:00-04:00", "2025-06-22T11:00:00-04:00");
+        exceptionEvent.setRecurringEventId("parent-1");
+        exceptionEvent.setOriginalStartTime(new EventDateTime()
+                .setDateTime(new DateTime("2025-06-22T09:00:00-04:00")));
+
+        CalendarEvent parentEntity = new CalendarEvent();
+        parentEntity.setId(UUID.randomUUID());
+        when(googleEventMapper.toEntity(eq(parentEvent), eq(syncedCal))).thenReturn(parentEntity);
+        // First call (during upsertEvent for parent): not found -> insert
+        // Second call (during upsertException for parent lookup): found
+        when(calendarEventRepository.findByGoogleEventId("parent-1"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(parentEntity));
+
+        CalendarEvent exceptionEntity = new CalendarEvent();
+        when(googleEventMapper.toExceptionEntity(eq(exceptionEvent), eq(syncedCal), eq(parentEntity)))
+                .thenReturn(exceptionEntity);
+        when(calendarEventRepository.findByGoogleEventId("parent-1_20250622")).thenReturn(Optional.empty());
+
+        syncService.persistIncrementalChanges(syncedCal, java.util.List.of(exceptionEvent, parentEvent));
+
+        InOrder inOrder = inOrder(calendarEventRepository, googleEventMapper);
+        inOrder.verify(googleEventMapper).toEntity(eq(parentEvent), eq(syncedCal));
+        inOrder.verify(calendarEventRepository).save(parentEntity);
+        inOrder.verify(googleEventMapper).toExceptionEntity(eq(exceptionEvent), eq(syncedCal), eq(parentEntity));
+        inOrder.verify(calendarEventRepository).save(exceptionEntity);
+    }
+
     // --- Helpers ---
 
     private Event createTimedGoogleEvent(String id, String summary, String startIso, String endIso) {
