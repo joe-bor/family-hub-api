@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
@@ -46,6 +47,9 @@ class GoogleCalendarSyncServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Wire the self-proxy to the spy so syncMember -> persistSyncedEvents works in unit tests
+        ReflectionTestUtils.setField(syncService, "self", syncService);
+
         family = new Family();
         family.setId(UUID.randomUUID());
 

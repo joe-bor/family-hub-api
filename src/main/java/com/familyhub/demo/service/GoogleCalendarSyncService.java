@@ -50,7 +50,6 @@ public class GoogleCalendarSyncService {
     }
 
     @Async
-    @Transactional
     public void syncMember(UUID memberId) {
         log.info("Starting async sync for member {}", memberId);
         List<GoogleSyncedCalendar> calendars = syncedCalendarRepository.findByMemberIdAndEnabledTrue(memberId);
@@ -80,11 +79,22 @@ public class GoogleCalendarSyncService {
                 .flatMap(List::stream)
                 .toList();
 
-        // Single delete for the member, then bulk insert
+        // DB operations — wrapped in a transaction via proxy
+        self.persistSyncedEvents(member, allEvents, eventsByCalendar, calendars);
+    }
+
+    /**
+     * Persists synced Google events within a single transaction.
+     * Called via self-proxy so @Transactional takes effect.
+     */
+    @Transactional
+    public void persistSyncedEvents(FamilyMember member,
+                                     List<Event> allEvents,
+                                     Map<GoogleSyncedCalendar, List<Event>> eventsByCalendar,
+                                     List<GoogleSyncedCalendar> calendars) {
         calendarEventRepository.deleteByMemberAndSource(member, EventSource.GOOGLE);
         saveGoogleEvents(allEvents, eventsByCalendar);
 
-        // Update sync metadata on all calendars
         Instant now = Instant.now();
         for (GoogleSyncedCalendar cal : calendars) {
             cal.setLastSyncedAt(now);
