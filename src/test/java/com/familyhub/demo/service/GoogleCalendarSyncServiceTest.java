@@ -257,6 +257,32 @@ class GoogleCalendarSyncServiceTest {
         verify(calendarEventRepository, never()).saveAll(any());
     }
 
+    @Test
+    void fetchIncrementalEvents_usesSyncTokenAndStoresNewToken() throws IOException {
+        syncedCal.setSyncToken("old-sync-token");
+
+        com.google.api.services.calendar.model.Events response = new com.google.api.services.calendar.model.Events();
+        Event changedEvent = createTimedGoogleEvent("evt-1", "Updated Meeting",
+                "2025-06-15T09:00:00-04:00", "2025-06-15T10:00:00-04:00");
+        response.setItems(java.util.List.of(changedEvent));
+        response.setNextSyncToken("new-sync-token");
+
+        Calendar calendarClient = mockIncrementalCalendarClient(response);
+
+        java.util.List<Event> result = syncService.fetchIncrementalEvents(syncedCal, calendarClient);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().getId()).isEqualTo("evt-1");
+        assertThat(syncedCal.getSyncToken()).isEqualTo("new-sync-token");
+
+        // Verify sync token was used, NOT setSingleEvents
+        Calendar.Events events = calendarClient.events();
+        Calendar.Events.List listReq = events.list(anyString());
+        verify(listReq).setSyncToken("old-sync-token");
+        verify(listReq, never()).setSingleEvents(anyBoolean());
+        verify(listReq, never()).setMaxResults(anyInt());
+    }
+
     // --- Helpers ---
 
     private Event createTimedGoogleEvent(String id, String summary, String startIso, String endIso) {
@@ -277,6 +303,20 @@ class GoogleCalendarSyncServiceTest {
         cal.setGoogleCalendarId(googleCalId);
         cal.setEnabled(true);
         return cal;
+    }
+
+    private Calendar mockIncrementalCalendarClient(com.google.api.services.calendar.model.Events response) throws IOException {
+        Calendar calendarClient = mock(Calendar.class);
+        Calendar.Events events = mock(Calendar.Events.class);
+        Calendar.Events.List listRequest = mock(Calendar.Events.List.class);
+
+        when(calendarClient.events()).thenReturn(events);
+        when(events.list(anyString())).thenReturn(listRequest);
+        when(listRequest.setSyncToken(anyString())).thenReturn(listRequest);
+        when(listRequest.setPageToken(any())).thenReturn(listRequest);
+        when(listRequest.execute()).thenReturn(response);
+
+        return calendarClient;
     }
 
     private Calendar mockCalendarClient(com.google.api.services.calendar.model.Events response) throws IOException {
