@@ -8,9 +8,12 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Component
 public class RecurrenceExpander {
@@ -24,8 +27,14 @@ public class RecurrenceExpander {
         Recur<LocalDate> recur = new Recur<>(parent.getRecurrenceRule());
         List<LocalDate> dates = recur.getDates(parent.getDate(), rangeStart, rangeEnd);
 
+        // Filter out EXDATE dates (excluded by the recurrence rule source, e.g., Google Calendar)
+        Set<LocalDate> excludedDates = parseExdates(parent.getExdates());
+
         List<CalendarEventResponse> results = new ArrayList<>();
         for (LocalDate date : dates) {
+            if (excludedDates.contains(date)) {
+                continue;
+            }
             CalendarEvent exception = exceptions.get(date);
             if (exception != null) {
                 if (exception.isCancelled()) {
@@ -39,5 +48,14 @@ public class RecurrenceExpander {
             }
         }
         return results;
+    }
+
+    private Set<LocalDate> parseExdates(String exdates) {
+        if (exdates == null || exdates.isBlank()) {
+            return Set.of();
+        }
+        return Arrays.stream(exdates.split(","))
+                .map(LocalDate::parse)
+                .collect(Collectors.toSet());
     }
 }

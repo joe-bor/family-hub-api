@@ -9,6 +9,8 @@ import com.google.api.services.calendar.model.EventDateTime;
 import org.springframework.stereotype.Component;
 
 import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.util.stream.Collectors;
 
 @Component
 public class GoogleEventMapper {
@@ -25,9 +27,28 @@ public class GoogleEventMapper {
                     .map(r -> r.substring("RRULE:".length()))
                     .orElse(null);
             entity.setRecurrenceRule(rrule);
+
+            String exdates = googleEvent.getRecurrence().stream()
+                    .filter(r -> r.startsWith("EXDATE"))
+                    .map(this::parseExdateEntry)
+                    .collect(Collectors.joining(","));
+            if (!exdates.isEmpty()) {
+                entity.setExdates(exdates);
+            }
         }
 
         return entity;
+    }
+
+    /**
+     * Parses a single EXDATE entry from Google's recurrence list into an ISO date string.
+     * Handles formats: "EXDATE;VALUE=DATE:20250617", "EXDATE:20250617T130000Z",
+     * "EXDATE;TZID=America/New_York:20250617T090000"
+     */
+    private String parseExdateEntry(String exdate) {
+        String value = exdate.substring(exdate.lastIndexOf(':') + 1);
+        String dateStr = value.substring(0, 8);
+        return LocalDate.parse(dateStr, DateTimeFormatter.BASIC_ISO_DATE).toString();
     }
 
     public CalendarEvent toExceptionEntity(Event googleEvent, GoogleSyncedCalendar syncedCal,

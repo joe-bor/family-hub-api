@@ -158,6 +158,45 @@ class RecurrenceExpanderTest {
     }
 
     @Test
+    void exdates_areFilteredFromExpansion() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        parent.setRecurrenceRule("FREQ=DAILY");
+        parent.setDate(LocalDate.of(2025, 6, 1));
+        parent.setExdates("2025-06-02,2025-06-04");
+
+        List<CalendarEventResponse> result = expander.expand(
+                parent,
+                LocalDate.of(2025, 6, 1),
+                LocalDate.of(2025, 6, 5),
+                Map.of()
+        );
+
+        assertThat(result).hasSize(3);
+        assertThat(result).extracting(CalendarEventResponse::date)
+                .containsExactly(
+                        LocalDate.of(2025, 6, 1),
+                        LocalDate.of(2025, 6, 3),
+                        LocalDate.of(2025, 6, 5)
+                );
+    }
+
+    @Test
+    void nullExdates_expandsNormally() {
+        CalendarEvent parent = createRecurringCalendarEvent(family, member);
+        parent.setRecurrenceRule("FREQ=DAILY");
+        parent.setDate(LocalDate.of(2025, 6, 1));
+
+        List<CalendarEventResponse> result = expander.expand(
+                parent,
+                LocalDate.of(2025, 6, 1),
+                LocalDate.of(2025, 6, 3),
+                Map.of()
+        );
+
+        assertThat(result).hasSize(3);
+    }
+
+    @Test
     void parentAfterRange_returnsEmpty() {
         CalendarEvent parent = createRecurringCalendarEvent(family, member);
         // Parent starts Jun 3 but we query Jan
