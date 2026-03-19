@@ -47,7 +47,7 @@ class GoogleCalendarSyncServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Wire the self-proxy to the spy so syncMember -> persistSyncedEvents works in unit tests
+        // Wire the self-proxy to the spy so @Transactional proxy calls work in unit tests
         ReflectionTestUtils.setField(syncService, "self", syncService);
 
         family = new Family();
@@ -216,45 +216,6 @@ class GoogleCalendarSyncServiceTest {
         verify(calendarEventRepository, times(1)).deleteBySyncedCalendarAndSource(syncedCal, EventSource.GOOGLE);
         verify(calendarEventRepository).saveAll(argThat(list ->
                 ((java.util.List<?>) list).contains(mappedEntity)));
-    }
-
-    @Test
-    void syncMember_anyCalendarFetchFails_abortsEntireSync() throws IOException {
-        GoogleSyncedCalendar cal1 = createSyncedCalendar("cal-1");
-        GoogleSyncedCalendar cal2 = createSyncedCalendar("cal-2");
-
-        when(syncedCalendarRepository.findByMemberIdAndEnabledTrue(member.getId()))
-                .thenReturn(java.util.List.of(cal1, cal2));
-
-        com.google.api.services.calendar.model.Events successResponse = new com.google.api.services.calendar.model.Events();
-        successResponse.setItems(new ArrayList<>());
-        successResponse.setNextSyncToken("token");
-
-        Calendar calendarClient = mock(Calendar.class);
-        Calendar.Events events = mock(Calendar.Events.class);
-        Calendar.Events.List listRequest1 = mock(Calendar.Events.List.class);
-        Calendar.Events.List listRequest2 = mock(Calendar.Events.List.class);
-
-        when(calendarClient.events()).thenReturn(events);
-        when(events.list("cal-1")).thenReturn(listRequest1);
-        when(events.list("cal-2")).thenReturn(listRequest2);
-
-        when(listRequest1.setSingleEvents(false)).thenReturn(listRequest1);
-        when(listRequest1.setMaxResults(250)).thenReturn(listRequest1);
-        when(listRequest1.setPageToken(null)).thenReturn(listRequest1);
-        when(listRequest1.execute()).thenReturn(successResponse);
-
-        when(listRequest2.setSingleEvents(false)).thenReturn(listRequest2);
-        when(listRequest2.setMaxResults(250)).thenReturn(listRequest2);
-        when(listRequest2.setPageToken(null)).thenReturn(listRequest2);
-        when(listRequest2.execute()).thenThrow(new IOException("Token expired"));
-
-        doReturn(calendarClient).when(syncService).buildCalendarClient(member.getId());
-
-        syncService.syncMember(member.getId());
-
-        verify(calendarEventRepository, never()).deleteByMemberAndSource(any(), any());
-        verify(calendarEventRepository, never()).saveAll(any());
     }
 
     @Test
@@ -464,6 +425,128 @@ class GoogleCalendarSyncServiceTest {
         inOrder.verify(calendarEventRepository).save(parentEntity);
         inOrder.verify(googleEventMapper).toExceptionEntity(eq(exceptionEvent), eq(syncedCal), eq(parentEntity));
         inOrder.verify(calendarEventRepository).save(exceptionEntity);
+    }
+
+    @Test
+    void syncMember_incrementalSync410_clearsTokenAndFallsBackToFullSync() throws IOException {
+        syncedCal.setSyncToken("stale-token");
+        when(syncedCalendarRepository.findByMemberIdAndEnabledTrue(member.getId()))
+                .thenReturn(java.util.List.of(syncedCal));
+
+        Calendar calendarClient = mock(Calendar.class);
+        Calendar.Events events = mock(Calendar.Events.class);
+        Calendar.Events.List listRequest = mock(Calendar.Events.List.class);
+
+        when(calendarClient.events()).thenReturn(events);
+        when(events.list("primary")).thenReturn(listRequest);
+        when(listRequest.setSyncToken("stale-token")).thenReturn(listRequest);
+        when(listRequest.setPageToken(any())).thenReturn(listRequest);
+
+        com.google.api.client.googleapis.json.GoogleJsonResponseException gone410 =
+                new com.google.api.client.googleapis.json.GoogleJsonResponseException(
+                        new com.google.api.client.http.HttpResponseException.Builder(
+                                410, "Gone", new com.google.api.client.http.HttpHeaders()),
+                        null);
+        when(listRequest.execute()).thenThrow(gone410);
+
+        doReturn(calendarClient).when(syncService).buildCalendarClient(member.getId());
+        doNothing().when(syncService).fullSync(syncedCal, calendarClient);
+
+        syncService.syncMember(member.getId());
+
+        assertThat(syncedCal.getSyncToken()).isNull();
+        verify(syncService).fullSync(syncedCal, calendarClient);
+    }
+
+    @Test
+    void syncMember_withSyncToken_usesIncrementalSync() throws IOException {
+        syncedCal.setSyncToken("valid-token");
+        when(syncedCalendarRepository.findByMemberIdAndEnabledTrue(member.getId()))
+                .thenReturn(java.util.List.of(syncedCal));
+
+        com.google.api.services.calendar.model.Events response = new com.google.api.services.calendar.model.Events();
+        response.setItems(new ArrayList<>());
+        response.setNextSyncToken("updated-token");
+
+        Calendar calendarClient = mockIncrementalCalendarClient(response);
+        doReturn(calendarClient).when(syncService).buildCalendarClient(member.getId());
+
+        syncService.syncMember(member.getId());
+
+        // Should NOT have called fullSync
+        verify(syncService, never()).fullSync(any(), any());
+        // Should have persisted incremental changes
+        verify(syncedCalendarRepository).save(syncedCal);
+    }
+
+    @Test
+    void syncMember_withoutSyncToken_usesFullSync() throws IOException {
+        syncedCal.setSyncToken(null);
+        when(syncedCalendarRepository.findByMemberIdAndEnabledTrue(member.getId()))
+                .thenReturn(java.util.List.of(syncedCal));
+
+        Calendar calendarClient = mock(Calendar.class);
+        doReturn(calendarClient).when(syncService).buildCalendarClient(member.getId());
+        doNothing().when(syncService).fullSync(syncedCal, calendarClient);
+
+        syncService.syncMember(member.getId());
+
+        verify(syncService).fullSync(syncedCal, calendarClient);
+    }
+
+    @Test
+    void syncMember_perCalendarIsolation_oneFailsOthersSyncSuccessfully() throws IOException {
+        GoogleSyncedCalendar cal1 = createSyncedCalendar("cal-1");
+        cal1.setSyncToken(null); // will use fullSync
+        GoogleSyncedCalendar cal2 = createSyncedCalendar("cal-2");
+        cal2.setSyncToken(null);
+
+        when(syncedCalendarRepository.findByMemberIdAndEnabledTrue(member.getId()))
+                .thenReturn(java.util.List.of(cal1, cal2));
+
+        Calendar calendarClient = mock(Calendar.class);
+        doReturn(calendarClient).when(syncService).buildCalendarClient(member.getId());
+
+        // cal1 fails, cal2 succeeds
+        doThrow(new RuntimeException("API error")).when(syncService).fullSync(cal1, calendarClient);
+        doNothing().when(syncService).fullSync(cal2, calendarClient);
+
+        syncService.syncMember(member.getId());
+
+        // cal2 should still have been synced despite cal1 failure
+        verify(syncService).fullSync(cal2, calendarClient);
+    }
+
+    @Test
+    void syncMember_nonGone410Exception_doesNotFallBackToFullSync() throws IOException {
+        syncedCal.setSyncToken("valid-token");
+        when(syncedCalendarRepository.findByMemberIdAndEnabledTrue(member.getId()))
+                .thenReturn(java.util.List.of(syncedCal));
+
+        Calendar calendarClient = mock(Calendar.class);
+        Calendar.Events events = mock(Calendar.Events.class);
+        Calendar.Events.List listRequest = mock(Calendar.Events.List.class);
+
+        when(calendarClient.events()).thenReturn(events);
+        when(events.list("primary")).thenReturn(listRequest);
+        when(listRequest.setSyncToken("valid-token")).thenReturn(listRequest);
+        when(listRequest.setPageToken(any())).thenReturn(listRequest);
+
+        com.google.api.client.googleapis.json.GoogleJsonResponseException forbidden403 =
+                new com.google.api.client.googleapis.json.GoogleJsonResponseException(
+                        new com.google.api.client.http.HttpResponseException.Builder(
+                                403, "Forbidden", new com.google.api.client.http.HttpHeaders()),
+                        null);
+        when(listRequest.execute()).thenThrow(forbidden403);
+
+        doReturn(calendarClient).when(syncService).buildCalendarClient(member.getId());
+
+        syncService.syncMember(member.getId());
+
+        // Should NOT fall back to fullSync for non-410 errors
+        verify(syncService, never()).fullSync(any(), any());
+        // Sync token should be preserved (not cleared)
+        assertThat(syncedCal.getSyncToken()).isEqualTo("valid-token");
     }
 
     // --- Helpers ---

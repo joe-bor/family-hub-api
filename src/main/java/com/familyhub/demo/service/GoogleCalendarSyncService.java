@@ -2,11 +2,11 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.model.CalendarEvent;
 import com.familyhub.demo.model.EventSource;
-import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.model.GoogleSyncedCalendar;
 import com.familyhub.demo.repository.CalendarEventRepository;
 import com.familyhub.demo.repository.GoogleSyncedCalendarRepository;
 import com.google.api.client.auth.oauth2.Credential;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.Event;
 import com.google.api.services.calendar.model.Events;
@@ -24,7 +24,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,45 +59,38 @@ public class GoogleCalendarSyncService {
 
         Calendar calendarClient = buildCalendarClient(memberId);
 
-        FamilyMember member = calendars.getFirst().getMember();
-
-        // Fetch events from all calendars first — abort entirely on any failure
-        Map<GoogleSyncedCalendar, List<Event>> eventsByCalendar = new LinkedHashMap<>();
+        // DD-1: Per-calendar isolation — each calendar syncs independently.
+        // fullSync uses deleteBySyncedCalendarAndSource (per-calendar scope),
+        // so a failure on one calendar cannot affect another's committed data.
+        // The abort-all pattern was originally for member-wide deletes via
+        // deleteByMemberAndSource, which is no longer used in sync.
         for (GoogleSyncedCalendar cal : calendars) {
             try {
-                eventsByCalendar.put(cal, fetchAllEvents(cal, calendarClient));
-            } catch (IOException e) {
-                log.error("Failed to fetch events from calendar {} for member {}: {}",
+                if (cal.getSyncToken() != null) {
+                    incrementalSync(cal, calendarClient);
+                } else {
+                    self.fullSync(cal, calendarClient);
+                }
+            } catch (Exception e) {
+                log.error("Sync failed for calendar {} (member {}): {}",
                         cal.getGoogleCalendarId(), memberId, e.getMessage());
-                log.error("Aborting sync for member {} — partial failure, preserving existing events", memberId);
-                return;
             }
         }
-
-        List<Event> allEvents = eventsByCalendar.values().stream()
-                .flatMap(List::stream)
-                .toList();
-
-        // DB operations — wrapped in a transaction via proxy
-        self.persistSyncedEvents(member, allEvents, eventsByCalendar, calendars);
     }
 
-    /**
-     * Persists synced Google events within a single transaction.
-     * Called via self-proxy so @Transactional takes effect.
-     */
-    @Transactional
-    public void persistSyncedEvents(FamilyMember member,
-                                     List<Event> allEvents,
-                                     Map<GoogleSyncedCalendar, List<Event>> eventsByCalendar,
-                                     List<GoogleSyncedCalendar> calendars) {
-        calendarEventRepository.deleteByMemberAndSource(member, EventSource.GOOGLE);
-        saveGoogleEvents(allEvents, eventsByCalendar);
-
-        Instant now = Instant.now();
-        for (GoogleSyncedCalendar cal : calendars) {
-            cal.setLastSyncedAt(now);
-            syncedCalendarRepository.save(cal);
+    private void incrementalSync(GoogleSyncedCalendar syncedCal, Calendar calendarClient) throws IOException {
+        try {
+            List<Event> changes = fetchIncrementalEvents(syncedCal, calendarClient);
+            self.persistIncrementalChanges(syncedCal, changes);
+        } catch (GoogleJsonResponseException e) {
+            if (e.getStatusCode() == 410) {
+                log.warn("Sync token expired for calendar {} — falling back to full sync",
+                        syncedCal.getGoogleCalendarId());
+                syncedCal.setSyncToken(null);
+                self.fullSync(syncedCal, calendarClient);
+            } else {
+                throw e;
+            }
         }
     }
 
