@@ -28,6 +28,7 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_EXPIRATION: 86400000
           JWT_ISSUER: family-hub-api-test
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
 
       - name: Upload test reports
         if: always()
