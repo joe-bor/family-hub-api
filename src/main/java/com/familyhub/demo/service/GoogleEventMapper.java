@@ -86,6 +86,7 @@ public class GoogleEventMapper {
         entity.setSource(EventSource.GOOGLE);
         entity.setMember(syncedCal.getMember());
         entity.setFamily(syncedCal.getMember().getFamily());
+        entity.setSyncedCalendar(syncedCal);
 
         if (googleEvent.getUpdated() != null) {
             entity.setGoogleUpdatedAt(Instant.ofEpochMilli(googleEvent.getUpdated().getValue()));

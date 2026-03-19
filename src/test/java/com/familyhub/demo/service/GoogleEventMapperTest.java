@@ -214,6 +214,21 @@ class GoogleEventMapperTest {
         }
 
         @Test
+        void setsSyncedCalendarOnEntity() {
+            Event googleEvent = new Event();
+            googleEvent.setId("cal-assoc-1");
+            googleEvent.setSummary("Test");
+            googleEvent.setUpdated(new DateTime(1700000000000L));
+            googleEvent.setStart(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-15T09:00:00-04:00")));
+            googleEvent.setEnd(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-15T10:00:00-04:00")));
+
+            CalendarEvent entity = mapper.toEntity(googleEvent, syncedCal);
+            assertThat(entity.getSyncedCalendar()).isEqualTo(syncedCal);
+        }
+
+        @Test
         void handlesNullSummaryWithDefault() {
             Event googleEvent = new Event();
             googleEvent.setId("minimal-event");
@@ -286,6 +301,31 @@ class GoogleEventMapperTest {
             assertThat(entity.getDate()).isEqualTo(LocalDate.of(2025, 6, 17));
             assertThat(entity.getStartTime()).isEqualTo(LocalTime.of(9, 0));
             assertThat(entity.getEndTime()).isEqualTo(LocalTime.of(9, 30));
+        }
+
+        @Test
+        void setsSyncedCalendarOnException() {
+            CalendarEvent parentEntity = new CalendarEvent();
+            parentEntity.setId(UUID.randomUUID());
+            parentEntity.setStartTime(LocalTime.of(9, 0));
+            parentEntity.setEndTime(LocalTime.of(9, 30));
+            parentEntity.setAllDay(false);
+
+            Event googleEvent = new Event();
+            googleEvent.setId("cal-assoc-exc");
+            googleEvent.setRecurringEventId("parent");
+            googleEvent.setSummary("Test Exception");
+            googleEvent.setStatus("confirmed");
+            googleEvent.setUpdated(new DateTime(1700000000000L));
+            googleEvent.setStart(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-10T10:00:00-04:00")));
+            googleEvent.setEnd(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-10T10:30:00-04:00")));
+            googleEvent.setOriginalStartTime(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-10T09:00:00-04:00")));
+
+            CalendarEvent entity = mapper.toExceptionEntity(googleEvent, syncedCal, parentEntity);
+            assertThat(entity.getSyncedCalendar()).isEqualTo(syncedCal);
         }
 
         @Test
