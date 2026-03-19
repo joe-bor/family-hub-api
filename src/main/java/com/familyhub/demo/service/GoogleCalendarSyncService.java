@@ -205,6 +205,69 @@ public class GoogleCalendarSyncService {
     }
 
     /**
+     * Persists incremental changes: upserts new/updated events, deletes cancelled ones.
+     * Parents/regular events processed before exceptions for FK resolution.
+     * Called via self-proxy to ensure @Transactional is active.
+     */
+    @Transactional
+    public void persistIncrementalChanges(GoogleSyncedCalendar syncedCal, List<Event> changedEvents) {
+        List<Event> parentChanges = changedEvents.stream()
+                .filter(e -> e.getRecurringEventId() == null)
+                .toList();
+        List<Event> exceptionChanges = changedEvents.stream()
+                .filter(e -> e.getRecurringEventId() != null)
+                .toList();
+
+        for (Event event : parentChanges) {
+            if ("cancelled".equals(event.getStatus())) {
+                calendarEventRepository.deleteByGoogleEventId(event.getId());
+            } else {
+                upsertEvent(event, syncedCal);
+            }
+        }
+
+        for (Event event : exceptionChanges) {
+            upsertException(event, syncedCal);
+        }
+
+        syncedCal.setLastSyncedAt(Instant.now());
+        syncedCalendarRepository.save(syncedCal);
+    }
+
+    private void upsertEvent(Event googleEvent, GoogleSyncedCalendar syncedCal) {
+        CalendarEvent entity = googleEventMapper.toEntity(googleEvent, syncedCal);
+        calendarEventRepository.findByGoogleEventId(googleEvent.getId())
+                .ifPresentOrElse(
+                        existing -> {
+                            updateExistingEvent(existing, entity);
+                            calendarEventRepository.save(existing);
+                        },
+                        () -> calendarEventRepository.save(entity)
+                );
+    }
+
+    private void upsertException(Event googleEvent, GoogleSyncedCalendar syncedCal) {
+        String googleParentId = googleEvent.getRecurringEventId();
+        Optional<CalendarEvent> parentOpt = calendarEventRepository.findByGoogleEventId(googleParentId);
+
+        if (parentOpt.isEmpty()) {
+            log.warn("Orphaned exception {} — parent {} not found, skipping",
+                    googleEvent.getId(), googleParentId);
+            return;
+        }
+
+        CalendarEvent entity = googleEventMapper.toExceptionEntity(googleEvent, syncedCal, parentOpt.get());
+        calendarEventRepository.findByGoogleEventId(googleEvent.getId())
+                .ifPresentOrElse(
+                        existing -> {
+                            updateExistingEvent(existing, entity);
+                            calendarEventRepository.save(existing);
+                        },
+                        () -> calendarEventRepository.save(entity)
+                );
+    }
+
+    /**
      * Copies mutable fields from updated entity onto existing entity.
      * Preserves: id, googleEventId, source, member, family, syncedCalendar, recurringEvent, originalDate.
      * DD-3: Field list must stay in sync with CalendarEvent entity changes.

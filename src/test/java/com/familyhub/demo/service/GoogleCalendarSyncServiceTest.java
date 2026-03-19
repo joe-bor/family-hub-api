@@ -340,6 +340,23 @@ class GoogleCalendarSyncServiceTest {
         assertThat(existing.getSyncedCalendar()).isSameAs(syncedCal);
     }
 
+    @Test
+    void persistIncrementalChanges_newEvent_isSaved() {
+        Event newGoogleEvent = createTimedGoogleEvent("new-evt-1", "New Meeting",
+                "2025-06-15T09:00:00-04:00", "2025-06-15T10:00:00-04:00");
+
+        CalendarEvent mappedEntity = new CalendarEvent();
+        mappedEntity.setGoogleEventId("new-evt-1");
+        when(googleEventMapper.toEntity(eq(newGoogleEvent), eq(syncedCal))).thenReturn(mappedEntity);
+        when(calendarEventRepository.findByGoogleEventId("new-evt-1")).thenReturn(Optional.empty());
+
+        syncService.persistIncrementalChanges(syncedCal, java.util.List.of(newGoogleEvent));
+
+        verify(calendarEventRepository).save(mappedEntity);
+        assertThat(syncedCal.getLastSyncedAt()).isNotNull();
+        verify(syncedCalendarRepository).save(syncedCal);
+    }
+
     // --- Helpers ---
 
     private Event createTimedGoogleEvent(String id, String summary, String startIso, String endIso) {
