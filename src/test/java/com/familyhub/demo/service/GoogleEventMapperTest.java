@@ -128,7 +128,7 @@ class GoogleEventMapperTest {
                     .setDateTime(new DateTime("2025-06-03T09:00:00-04:00")));
             googleEvent.setEnd(new EventDateTime()
                     .setDateTime(new DateTime("2025-06-03T09:30:00-04:00")));
-            googleEvent.setRecurrence(List.of("RRULE:FREQ=WEEKLY;BYDAY=TU", "EXDATE;VALUE=DATE:20250617"));
+            googleEvent.setRecurrence(List.of("RRULE:FREQ=WEEKLY;BYDAY=TU"));
 
             CalendarEvent entity = mapper.toEntity(googleEvent, syncedCal);
 
@@ -151,6 +151,66 @@ class GoogleEventMapperTest {
             CalendarEvent entity = mapper.toEntity(googleEvent, syncedCal);
 
             assertThat(entity.getRecurrenceRule()).isNull();
+        }
+
+        @Test
+        void extractsExdatesFromRecurrenceList() {
+            Event googleEvent = new Event();
+            googleEvent.setId("exdate-test");
+            googleEvent.setSummary("Weekly");
+            googleEvent.setUpdated(new DateTime(1700000000000L));
+            googleEvent.setStart(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-03T09:00:00-04:00")));
+            googleEvent.setEnd(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-03T09:30:00-04:00")));
+            googleEvent.setRecurrence(List.of(
+                    "RRULE:FREQ=WEEKLY;BYDAY=TU",
+                    "EXDATE;VALUE=DATE:20250617",
+                    "EXDATE;VALUE=DATE:20250624"
+            ));
+
+            CalendarEvent entity = mapper.toEntity(googleEvent, syncedCal);
+
+            assertThat(entity.getRecurrenceRule()).isEqualTo("FREQ=WEEKLY;BYDAY=TU");
+            assertThat(entity.getExdates()).isEqualTo("2025-06-17,2025-06-24");
+        }
+
+        @Test
+        void extractsExdatesFromTimedExdateFormat() {
+            Event googleEvent = new Event();
+            googleEvent.setId("exdate-timed");
+            googleEvent.setSummary("Weekly");
+            googleEvent.setUpdated(new DateTime(1700000000000L));
+            googleEvent.setStart(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-03T09:00:00-04:00")));
+            googleEvent.setEnd(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-03T09:30:00-04:00")));
+            googleEvent.setRecurrence(List.of(
+                    "RRULE:FREQ=WEEKLY;BYDAY=TU",
+                    "EXDATE:20250617T130000Z"
+            ));
+
+            CalendarEvent entity = mapper.toEntity(googleEvent, syncedCal);
+
+            assertThat(entity.getRecurrenceRule()).isEqualTo("FREQ=WEEKLY;BYDAY=TU");
+            assertThat(entity.getExdates()).isEqualTo("2025-06-17");
+        }
+
+        @Test
+        void noExdates_exdatesFieldIsNull() {
+            Event googleEvent = new Event();
+            googleEvent.setId("no-exdate");
+            googleEvent.setSummary("Weekly");
+            googleEvent.setUpdated(new DateTime(1700000000000L));
+            googleEvent.setStart(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-03T09:00:00-04:00")));
+            googleEvent.setEnd(new EventDateTime()
+                    .setDateTime(new DateTime("2025-06-03T09:30:00-04:00")));
+            googleEvent.setRecurrence(List.of("RRULE:FREQ=WEEKLY;BYDAY=TU"));
+
+            CalendarEvent entity = mapper.toEntity(googleEvent, syncedCal);
+
+            assertThat(entity.getExdates()).isNull();
         }
 
         @Test
