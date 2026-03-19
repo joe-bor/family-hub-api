@@ -1,0 +1,45 @@
+package com.familyhub.demo.scheduler;
+
+import com.familyhub.demo.model.GoogleOAuthToken;
+import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
+import com.familyhub.demo.service.GoogleCalendarSyncService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * Runs incremental sync for all Google-connected members on a fixed interval.
+ *
+ * DD-2: @ConditionalOnProperty prevents this bean from loading when Google OAuth
+ * is not configured. Works because application.yml defaults google.oauth.client-id
+ * to empty string when GOOGLE_CLIENT_ID env var is absent, and
+ * @ConditionalOnProperty treats empty as absent by default.
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+@ConditionalOnProperty(name = "google.oauth.client-id")
+public class GoogleCalendarSyncScheduler {
+
+    private final GoogleOAuthTokenRepository tokenRepository;
+    private final GoogleCalendarSyncService syncService;
+
+    @Scheduled(fixedRate = 900_000) // 15 minutes in milliseconds
+    public void syncAllConnectedMembers() {
+        List<GoogleOAuthToken> tokens = tokenRepository.findAll();
+        log.info("Scheduled sync: {} connected members", tokens.size());
+
+        for (GoogleOAuthToken token : tokens) {
+            try {
+                syncService.syncMember(token.getMember().getId());
+            } catch (Exception e) {
+                log.error("Scheduled sync failed for member {}: {}",
+                        token.getMember().getId(), e.getMessage());
+            }
+        }
+    }
+}
