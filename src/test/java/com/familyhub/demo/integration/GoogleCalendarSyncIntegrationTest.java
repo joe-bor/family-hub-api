@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import javax.sql.DataSource;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -184,6 +185,57 @@ class GoogleCalendarSyncIntegrationTest {
                 .andExpect(jsonPath("$.data[1].source").value("NATIVE"));
     }
 
+    @Test
+    void disconnectCleansUpGoogleEventsAndSyncedCalendars() throws Exception {
+        // Insert a synced calendar row
+        String syncedCalId = UUID.randomUUID().toString();
+        String tokenId = insertOAuthToken();
+        insertSyncedCalendar(syncedCalId, tokenId, "primary");
+
+        // Insert Google events associated with this calendar
+        insertGoogleEvent("google-disconnect-1", "Meeting", "09:00", "10:00",
+                "2025-06-15", false, null, null, null, false, null, null);
+
+        // Verify events exist
+        mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-06-15")
+                        .param("endDate", "2025-06-15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1));
+
+        // Disconnect
+        mockMvc.perform(delete("/api/google/disconnect/" + memberId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        // Verify Google events are gone
+        mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-06-15")
+                        .param("endDate", "2025-06-15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+
+        // Verify synced calendar rows are gone
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement("SELECT count(*) FROM google_synced_calendar WHERE member_id = ?::uuid")) {
+            stmt.setString(1, memberId);
+            var rs = stmt.executeQuery();
+            rs.next();
+            assertThat(rs.getInt(1)).isZero();
+        }
+
+        // Verify token row is gone
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement("SELECT count(*) FROM google_oauth_token WHERE member_id = ?::uuid")) {
+            stmt.setString(1, memberId);
+            var rs = stmt.executeQuery();
+            rs.next();
+            assertThat(rs.getInt(1)).isZero();
+        }
+    }
+
     // --- SQL Helpers ---
 
     private String insertGoogleEvent(String googleEventId, String title, String startTime,
@@ -236,6 +288,35 @@ class GoogleCalendarSyncIntegrationTest {
             stmt.setString(8, googleEventId);
             stmt.setString(9, parentId);
             stmt.setString(10, originalDate);
+            stmt.executeUpdate();
+        }
+    }
+
+    private String insertOAuthToken() throws Exception {
+        String tokenId = UUID.randomUUID().toString();
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                     "INSERT INTO google_oauth_token (id, member_id, access_token, refresh_token, " +
+                             "token_expiry, scope, created_at, updated_at) " +
+                             "VALUES (?::uuid, ?::uuid, 'enc-access', 'enc-refresh', " +
+                             "NOW() + INTERVAL '1 hour', 'calendar.events.readonly', NOW(), NOW())")) {
+            stmt.setString(1, tokenId);
+            stmt.setString(2, memberId);
+            stmt.executeUpdate();
+        }
+        return tokenId;
+    }
+
+    private void insertSyncedCalendar(String id, String tokenId, String googleCalendarId) throws Exception {
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                     "INSERT INTO google_synced_calendar (id, token_id, member_id, google_calendar_id, " +
+                             "calendar_name, enabled, created_at) " +
+                             "VALUES (?::uuid, ?::uuid, ?::uuid, ?, 'Primary', true, NOW())")) {
+            stmt.setString(1, id);
+            stmt.setString(2, tokenId);
+            stmt.setString(3, memberId);
+            stmt.setString(4, googleCalendarId);
             stmt.executeUpdate();
         }
     }
