@@ -75,4 +75,11 @@ public class CalendarEvent {
 
     @Column(name = "google_updated_at")
     private Instant googleUpdatedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "synced_calendar_id")
+    private GoogleSyncedCalendar syncedCalendar;
+
+    @Column(columnDefinition = "TEXT")
+    private String exdates;
 }

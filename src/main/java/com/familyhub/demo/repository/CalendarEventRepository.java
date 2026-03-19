@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.model.EventSource;
+import com.familyhub.demo.model.GoogleSyncedCalendar;
 
 import java.util.Collection;
 import java.util.List;
@@ -17,6 +18,8 @@ import java.util.UUID;
 
 public interface CalendarEventRepository extends JpaRepository<CalendarEvent, UUID> {
     void deleteByMemberAndSource(FamilyMember member, EventSource source);
+
+    void deleteBySyncedCalendarAndSource(GoogleSyncedCalendar syncedCalendar, EventSource source);
 
     List<CalendarEvent> findByFamily(Family family);
     Optional<CalendarEvent> findByFamilyAndId(Family family, UUID uuid);
