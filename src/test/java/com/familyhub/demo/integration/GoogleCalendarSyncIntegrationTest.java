@@ -236,6 +236,67 @@ class GoogleCalendarSyncIntegrationTest {
         }
     }
 
+    @Test
+    void deletingParentCascadeDeletesExceptions() throws Exception {
+        // Insert a recurring parent
+        String parentId = insertGoogleEvent("cascade-parent", "Daily Sync", "10:00", "10:30",
+                "2025-06-02", false, null, "FREQ=DAILY", null, false, null, null);
+
+        // Insert two exceptions pointing to that parent
+        insertGoogleException("cascade-parent_20250605", "Edited", "11:00", "11:30",
+                "2025-06-05", parentId, "2025-06-05", false);
+        insertGoogleException("cascade-parent_20250606", "Cancelled", "10:00", "10:30",
+                "2025-06-06", parentId, "2025-06-06", true);
+
+        // Verify all 3 rows exist
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                     "SELECT count(*) FROM calendar_event WHERE google_event_id LIKE 'cascade-parent%'")) {
+            var rs = stmt.executeQuery();
+            rs.next();
+            assertThat(rs.getInt(1)).isEqualTo(3);
+        }
+
+        // Delete parent (simulates incremental sync cancelling a parent)
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                     "DELETE FROM calendar_event WHERE google_event_id = 'cascade-parent'")) {
+            stmt.executeUpdate();
+        }
+
+        // Verify exceptions are also gone via cascade
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                     "SELECT count(*) FROM calendar_event WHERE google_event_id LIKE 'cascade-parent%'")) {
+            var rs = stmt.executeQuery();
+            rs.next();
+            assertThat(rs.getInt(1)).isZero();
+        }
+    }
+
+    @Test
+    void upsertingExistingEventUpdatesInPlace() throws Exception {
+        // Insert a Google event
+        insertGoogleEvent("upsert-evt-1", "Original Title", "09:00", "10:00",
+                "2025-06-15", false, null, null, null, false, null, null);
+
+        // Simulate an "upsert" by updating the same row (same google_event_id)
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                     "UPDATE calendar_event SET title = 'Updated Title' WHERE google_event_id = 'upsert-evt-1'")) {
+            stmt.executeUpdate();
+        }
+
+        // Verify only one row exists and it has the new title
+        mockMvc.perform(get("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .param("startDate", "2025-06-15")
+                        .param("endDate", "2025-06-15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].title").value("Updated Title"));
+    }
+
     // --- SQL Helpers ---
 
     private String insertGoogleEvent(String googleEventId, String title, String startTime,
