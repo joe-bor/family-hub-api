@@ -266,13 +266,13 @@ class GoogleCalendarSyncServiceTest {
         updated.setDate(java.time.LocalDate.of(2025, 6, 16));
         updated.setStartTime(java.time.LocalTime.of(10, 0));
         updated.setEndTime(java.time.LocalTime.of(11, 0));
-        updated.setAllDay(false);
+        updated.setAllDay(true);
         updated.setHtmlLink("https://calendar.google.com/updated");
         updated.setEtag("\"etag-2\"");
         updated.setGoogleUpdatedAt(java.time.Instant.now());
         updated.setRecurrenceRule("FREQ=WEEKLY");
         updated.setExdates("2025-06-23");
-        updated.setCancelled(false);
+        updated.setCancelled(true);
 
         UUID originalId = existing.getId();
         FamilyMember originalMember = existing.getMember();
@@ -291,6 +291,9 @@ class GoogleCalendarSyncServiceTest {
         assertThat(existing.getRecurrenceRule()).isEqualTo("FREQ=WEEKLY");
         assertThat(existing.getExdates()).isEqualTo("2025-06-23");
         assertThat(existing.getEndDate()).isEqualTo(updated.getEndDate());
+        assertThat(existing.isAllDay()).isTrue();
+        assertThat(existing.isCancelled()).isTrue();
+        assertThat(existing.getGoogleUpdatedAt()).isEqualTo(updated.getGoogleUpdatedAt());
 
         // Immutable fields preserved
         assertThat(existing.getId()).isEqualTo(originalId);

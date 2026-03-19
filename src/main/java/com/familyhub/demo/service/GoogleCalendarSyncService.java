@@ -109,8 +109,8 @@ public class GoogleCalendarSyncService {
     }
 
     /**
-     * Sync a single calendar. Used when only one calendar needs syncing.
-     * Deletes all Google events for the member first, then inserts from this calendar.
+     * Full sync for a single calendar: deletes all Google events for this calendar,
+     * then re-inserts from scratch. Used for initial sync or 410 Gone fallback.
      */
     @Transactional
     public void fullSync(GoogleSyncedCalendar syncedCal, Calendar calendarClient) {
