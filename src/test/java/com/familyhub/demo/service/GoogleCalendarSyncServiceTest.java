@@ -65,7 +65,7 @@ class GoogleCalendarSyncServiceTest {
     }
 
     @Test
-    void fullSync_deletesExistingGoogleEventsFirst() throws IOException {
+    void fullSync_deletesThisCalendarsEventsOnly() throws IOException {
         com.google.api.services.calendar.model.Events response = new com.google.api.services.calendar.model.Events();
         response.setItems(new ArrayList<>());
         response.setNextSyncToken("sync-token-1");
@@ -73,7 +73,8 @@ class GoogleCalendarSyncServiceTest {
         Calendar calendarClient = mockCalendarClient(response);
         syncService.fullSync(syncedCal, calendarClient);
 
-        verify(calendarEventRepository).deleteByMemberAndSource(member, EventSource.GOOGLE);
+        verify(calendarEventRepository).deleteBySyncedCalendarAndSource(syncedCal, EventSource.GOOGLE);
+        verify(calendarEventRepository, never()).deleteByMemberAndSource(any(), any());
     }
 
     @Test
@@ -108,7 +109,7 @@ class GoogleCalendarSyncServiceTest {
         syncService.fullSync(syncedCal, calendarClient);
 
         InOrder inOrder = inOrder(calendarEventRepository);
-        inOrder.verify(calendarEventRepository).deleteByMemberAndSource(member, EventSource.GOOGLE);
+        inOrder.verify(calendarEventRepository).deleteBySyncedCalendarAndSource(syncedCal, EventSource.GOOGLE);
         inOrder.verify(calendarEventRepository).saveAll(argThat(list ->
                 ((java.util.List<?>) list).contains(parentEntity)));
         inOrder.verify(calendarEventRepository).flush();
@@ -208,30 +209,43 @@ class GoogleCalendarSyncServiceTest {
 
         syncService.fullSync(syncedCal, calendarClient);
 
-        verify(calendarEventRepository, times(1)).deleteByMemberAndSource(member, EventSource.GOOGLE);
+        verify(calendarEventRepository, times(1)).deleteBySyncedCalendarAndSource(syncedCal, EventSource.GOOGLE);
         verify(calendarEventRepository).saveAll(argThat(list ->
                 ((java.util.List<?>) list).contains(mappedEntity)));
     }
 
     @Test
-    void syncMember_allCalendarsFetchFail_doesNotDeleteExistingEvents() throws IOException {
+    void syncMember_anyCalendarFetchFails_abortsEntireSync() throws IOException {
         GoogleSyncedCalendar cal1 = createSyncedCalendar("cal-1");
         GoogleSyncedCalendar cal2 = createSyncedCalendar("cal-2");
 
         when(syncedCalendarRepository.findByMemberIdAndEnabledTrue(member.getId()))
                 .thenReturn(java.util.List.of(cal1, cal2));
 
-        // Build a mock client where execute() throws IOException
-        com.google.api.services.calendar.model.Events dummyResponse = new com.google.api.services.calendar.model.Events();
-        dummyResponse.setItems(new ArrayList<>());
-        Calendar failClient = mockCalendarClient(dummyResponse);
+        com.google.api.services.calendar.model.Events successResponse = new com.google.api.services.calendar.model.Events();
+        successResponse.setItems(new ArrayList<>());
+        successResponse.setNextSyncToken("token");
 
-        // Re-stub execute to throw
-        Calendar.Events events = failClient.events();
-        List listRequest = events.list(anyString());
-        when(listRequest.execute()).thenThrow(new IOException("Token expired"));
+        Calendar calendarClient = mock(Calendar.class);
+        Calendar.Events events = mock(Calendar.Events.class);
+        Calendar.Events.List listRequest1 = mock(Calendar.Events.List.class);
+        Calendar.Events.List listRequest2 = mock(Calendar.Events.List.class);
 
-        doReturn(failClient).when(syncService).buildCalendarClient(member.getId());
+        when(calendarClient.events()).thenReturn(events);
+        when(events.list("cal-1")).thenReturn(listRequest1);
+        when(events.list("cal-2")).thenReturn(listRequest2);
+
+        when(listRequest1.setSingleEvents(false)).thenReturn(listRequest1);
+        when(listRequest1.setMaxResults(250)).thenReturn(listRequest1);
+        when(listRequest1.setPageToken(null)).thenReturn(listRequest1);
+        when(listRequest1.execute()).thenReturn(successResponse);
+
+        when(listRequest2.setSingleEvents(false)).thenReturn(listRequest2);
+        when(listRequest2.setMaxResults(250)).thenReturn(listRequest2);
+        when(listRequest2.setPageToken(null)).thenReturn(listRequest2);
+        when(listRequest2.execute()).thenThrow(new IOException("Token expired"));
+
+        doReturn(calendarClient).when(syncService).buildCalendarClient(member.getId());
 
         syncService.syncMember(member.getId());
 
