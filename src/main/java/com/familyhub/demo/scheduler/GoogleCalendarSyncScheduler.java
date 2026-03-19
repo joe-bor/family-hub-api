@@ -5,7 +5,7 @@ import com.familyhub.demo.repository.GoogleOAuthTokenRepository;
 import com.familyhub.demo.service.GoogleCalendarSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -14,15 +14,15 @@ import java.util.List;
 /**
  * Runs incremental sync for all Google-connected members on a fixed interval.
  *
- * DD-2: @ConditionalOnProperty prevents this bean from loading when Google OAuth
- * is not configured. Works because application.yml defaults google.oauth.client-id
- * to empty string when GOOGLE_CLIENT_ID env var is absent, and
- * @ConditionalOnProperty treats empty as absent by default.
+ * DD-2: @ConditionalOnExpression prevents this bean from loading when Google OAuth
+ * is not configured. Uses !isEmpty() because @ConditionalOnProperty treats an empty
+ * string value as present (not absent), so it cannot be used to gate on a non-empty
+ * client ID.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "google.oauth.client-id")
+@ConditionalOnExpression("!'${google.oauth.client-id:}'.isEmpty()")
 public class GoogleCalendarSyncScheduler {
 
     private final GoogleOAuthTokenRepository tokenRepository;
