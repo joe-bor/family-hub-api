@@ -204,6 +204,28 @@ public class GoogleCalendarSyncService {
         return changedEvents;
     }
 
+    /**
+     * Copies mutable fields from updated entity onto existing entity.
+     * Preserves: id, googleEventId, source, member, family, syncedCalendar, recurringEvent, originalDate.
+     * DD-3: Field list must stay in sync with CalendarEvent entity changes.
+     */
+    void updateExistingEvent(CalendarEvent existing, CalendarEvent updated) {
+        existing.setTitle(updated.getTitle());
+        existing.setDescription(updated.getDescription());
+        existing.setLocation(updated.getLocation());
+        existing.setDate(updated.getDate());
+        existing.setEndDate(updated.getEndDate());
+        existing.setStartTime(updated.getStartTime());
+        existing.setEndTime(updated.getEndTime());
+        existing.setAllDay(updated.isAllDay());
+        existing.setHtmlLink(updated.getHtmlLink());
+        existing.setEtag(updated.getEtag());
+        existing.setGoogleUpdatedAt(updated.getGoogleUpdatedAt());
+        existing.setRecurrenceRule(updated.getRecurrenceRule());
+        existing.setExdates(updated.getExdates());
+        existing.setCancelled(updated.isCancelled());
+    }
+
     private List<Event> fetchAllEvents(GoogleSyncedCalendar syncedCal, Calendar calendarClient) throws IOException {
         String pageToken = null;
         List<Event> allEvents = new ArrayList<>();

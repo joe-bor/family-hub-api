@@ -283,6 +283,63 @@ class GoogleCalendarSyncServiceTest {
         verify(listReq, never()).setMaxResults(anyInt());
     }
 
+    @Test
+    void updateExistingEvent_copiesMutableFieldsOnly() {
+        CalendarEvent existing = new CalendarEvent();
+        existing.setId(UUID.randomUUID());
+        existing.setGoogleEventId("google-123");
+        existing.setSource(EventSource.GOOGLE);
+        existing.setMember(member);
+        existing.setFamily(family);
+        existing.setSyncedCalendar(syncedCal);
+        existing.setTitle("Old Title");
+        existing.setDescription("Old Desc");
+        existing.setStartTime(java.time.LocalTime.of(9, 0));
+        existing.setEndTime(java.time.LocalTime.of(10, 0));
+        existing.setDate(java.time.LocalDate.of(2025, 6, 15));
+
+        CalendarEvent updated = new CalendarEvent();
+        updated.setTitle("New Title");
+        updated.setDescription("New Desc");
+        updated.setLocation("Room 42");
+        updated.setDate(java.time.LocalDate.of(2025, 6, 16));
+        updated.setStartTime(java.time.LocalTime.of(10, 0));
+        updated.setEndTime(java.time.LocalTime.of(11, 0));
+        updated.setAllDay(false);
+        updated.setHtmlLink("https://calendar.google.com/updated");
+        updated.setEtag("\"etag-2\"");
+        updated.setGoogleUpdatedAt(java.time.Instant.now());
+        updated.setRecurrenceRule("FREQ=WEEKLY");
+        updated.setExdates("2025-06-23");
+        updated.setCancelled(false);
+
+        UUID originalId = existing.getId();
+        FamilyMember originalMember = existing.getMember();
+
+        syncService.updateExistingEvent(existing, updated);
+
+        // Mutable fields copied
+        assertThat(existing.getTitle()).isEqualTo("New Title");
+        assertThat(existing.getDescription()).isEqualTo("New Desc");
+        assertThat(existing.getLocation()).isEqualTo("Room 42");
+        assertThat(existing.getDate()).isEqualTo(java.time.LocalDate.of(2025, 6, 16));
+        assertThat(existing.getStartTime()).isEqualTo(java.time.LocalTime.of(10, 0));
+        assertThat(existing.getEndTime()).isEqualTo(java.time.LocalTime.of(11, 0));
+        assertThat(existing.getHtmlLink()).isEqualTo("https://calendar.google.com/updated");
+        assertThat(existing.getEtag()).isEqualTo("\"etag-2\"");
+        assertThat(existing.getRecurrenceRule()).isEqualTo("FREQ=WEEKLY");
+        assertThat(existing.getExdates()).isEqualTo("2025-06-23");
+        assertThat(existing.getEndDate()).isEqualTo(updated.getEndDate());
+
+        // Immutable fields preserved
+        assertThat(existing.getId()).isEqualTo(originalId);
+        assertThat(existing.getGoogleEventId()).isEqualTo("google-123");
+        assertThat(existing.getSource()).isEqualTo(EventSource.GOOGLE);
+        assertThat(existing.getMember()).isSameAs(originalMember);
+        assertThat(existing.getFamily()).isSameAs(family);
+        assertThat(existing.getSyncedCalendar()).isSameAs(syncedCal);
+    }
+
     // --- Helpers ---
 
     private Event createTimedGoogleEvent(String id, String summary, String startIso, String endIso) {
