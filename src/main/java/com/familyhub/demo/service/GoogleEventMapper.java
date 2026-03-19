@@ -137,6 +137,13 @@ public class GoogleEventMapper {
         return LocalDate.parse(googleDate.toStringRfc3339());
     }
 
+    /**
+     * Converts a Google DateTime to ZonedDateTime using the event's original timezone offset.
+     * This means the resulting local time reflects the timezone where the event was created,
+     * not necessarily the family's timezone. If a member creates an event at 3 PM EST while
+     * traveling, it will appear as 3 PM even for a PST-based family (correct would be 12 PM PST).
+     * A future improvement would convert to a configurable family timezone instead.
+     */
     private ZonedDateTime toZonedDateTime(DateTime googleDateTime) {
         return Instant.ofEpochMilli(googleDateTime.getValue())
                 .atZone(ZoneOffset.ofTotalSeconds(googleDateTime.getTimeZoneShift() * 60));
