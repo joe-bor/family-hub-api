@@ -69,7 +69,7 @@ public class GoogleCalendarSyncService {
                 if (cal.getSyncToken() != null) {
                     incrementalSync(cal, calendarClient);
                 } else {
-                    self.fullSync(cal, calendarClient);
+                    fullSync(cal, calendarClient);
                 }
             } catch (Exception e) {
                 log.error("Sync failed for calendar {} (member {}): {}",
@@ -87,7 +87,7 @@ public class GoogleCalendarSyncService {
                 log.warn("Sync token expired for calendar {} — falling back to full sync",
                         syncedCal.getGoogleCalendarId());
                 syncedCal.setSyncToken(null);
-                self.fullSync(syncedCal, calendarClient);
+                fullSync(syncedCal, calendarClient);
             } else {
                 throw e;
             }
@@ -109,23 +109,31 @@ public class GoogleCalendarSyncService {
     }
 
     /**
-     * Full sync for a single calendar: deletes all Google events for this calendar,
-     * then re-inserts from scratch. Used for initial sync or 410 Gone fallback.
+     * Full sync for a single calendar: fetches all events from Google, then persists
+     * via a separate transactional method. Used for initial sync or 410 Gone fallback.
      */
-    @Transactional
     public void fullSync(GoogleSyncedCalendar syncedCal, Calendar calendarClient) {
         try {
             List<Event> allEvents = fetchAllEvents(syncedCal, calendarClient);
-            calendarEventRepository.deleteBySyncedCalendarAndSource(syncedCal, EventSource.GOOGLE);
-            Map<GoogleSyncedCalendar, List<Event>> eventsByCalendar = Map.of(syncedCal, allEvents);
-            saveGoogleEvents(allEvents, eventsByCalendar);
-            syncedCal.setLastSyncedAt(Instant.now());
-            syncedCalendarRepository.save(syncedCal);
+            self.persistFullSync(syncedCal, allEvents);
         } catch (IOException e) {
             log.error("Failed to sync calendar {} for member {}: {}",
                     syncedCal.getGoogleCalendarId(), syncedCal.getMember().getId(), e.getMessage());
             throw new RuntimeException("Google Calendar sync failed", e);
         }
+    }
+
+    /**
+     * Persists a full sync: deletes existing Google events for this calendar,
+     * then re-inserts from scratch. Called via self-proxy to ensure @Transactional is active.
+     */
+    @Transactional
+    public void persistFullSync(GoogleSyncedCalendar syncedCal, List<Event> allEvents) {
+        calendarEventRepository.deleteBySyncedCalendarAndSource(syncedCal, EventSource.GOOGLE);
+        Map<GoogleSyncedCalendar, List<Event>> eventsByCalendar = Map.of(syncedCal, allEvents);
+        saveGoogleEvents(allEvents, eventsByCalendar);
+        syncedCal.setLastSyncedAt(Instant.now());
+        syncedCalendarRepository.save(syncedCal);
     }
 
     /**
