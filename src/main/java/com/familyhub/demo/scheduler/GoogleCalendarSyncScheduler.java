@@ -34,12 +34,7 @@ public class GoogleCalendarSyncScheduler {
         log.info("Scheduled sync: {} connected members", tokens.size());
 
         for (GoogleOAuthToken token : tokens) {
-            try {
-                syncService.syncMember(token.getMember().getId());
-            } catch (Exception e) {
-                log.error("Scheduled sync failed for member {}: {}",
-                        token.getMember().getId(), e.getMessage());
-            }
+            syncService.syncMember(token.getMember().getId());
         }
     }
 }

@@ -43,19 +43,22 @@ class GoogleCalendarSyncSchedulerTest {
     }
 
     @Test
-    void syncAllConnectedMembers_oneMemberFails_otherStillSynced() {
+    void syncAllConnectedMembers_callsSyncMemberForEveryToken() {
         UUID memberId1 = UUID.randomUUID();
         UUID memberId2 = UUID.randomUUID();
+        UUID memberId3 = UUID.randomUUID();
 
-        GoogleOAuthToken token1 = createTokenWithMember(memberId1);
-        GoogleOAuthToken token2 = createTokenWithMember(memberId2);
-
-        when(tokenRepository.findAll()).thenReturn(List.of(token1, token2));
-        doThrow(new RuntimeException("Sync failed")).when(syncService).syncMember(memberId1);
+        when(tokenRepository.findAll()).thenReturn(List.of(
+                createTokenWithMember(memberId1),
+                createTokenWithMember(memberId2),
+                createTokenWithMember(memberId3)));
 
         scheduler.syncAllConnectedMembers();
 
+        verify(syncService).syncMember(memberId1);
         verify(syncService).syncMember(memberId2);
+        verify(syncService).syncMember(memberId3);
+        verifyNoMoreInteractions(syncService);
     }
 
     private GoogleOAuthToken createTokenWithMember(UUID memberId) {
