@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/joe-bor/family-hub-api/compare/v1.0.0...v1.0.1) (2026-03-20)
+
+
+### Bug Fixes
+
+* **ci:** fold retag job into release workflow ([dfd9e51](https://github.com/joe-bor/family-hub-api/commit/dfd9e514e79033045ab8c97f1ee7d55ef7f705ef))
+
 ## 1.0.0 (2026-03-20)
 
 
