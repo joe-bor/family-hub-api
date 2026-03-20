@@ -196,26 +196,44 @@ class GoogleCalendarSyncIntegrationTest {
         insertGoogleEvent("google-disconnect-1", "Meeting", "09:00", "10:00",
                 "2025-06-15", false, null, null, null, false, null, null);
 
-        // Verify events exist
+        // Insert a native event — should survive disconnect
+        mockMvc.perform(post("/api/calendar/events")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "Native Survives",
+                                    "startTime": "2:00 PM",
+                                    "endTime": "3:00 PM",
+                                    "date": "2025-06-15",
+                                    "memberId": "%s",
+                                    "isAllDay": false
+                                }
+                                """.formatted(memberId)))
+                .andExpect(status().isCreated());
+
+        // Verify both events exist
         mockMvc.perform(get("/api/calendar/events")
                         .header("Authorization", "Bearer " + token)
                         .param("startDate", "2025-06-15")
                         .param("endDate", "2025-06-15"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1));
+                .andExpect(jsonPath("$.data.length()").value(2));
 
         // Disconnect
         mockMvc.perform(delete("/api/google/disconnect/" + memberId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
 
-        // Verify Google events are gone
+        // Verify Google events are gone but native event survives
         mockMvc.perform(get("/api/calendar/events")
                         .header("Authorization", "Bearer " + token)
                         .param("startDate", "2025-06-15")
                         .param("endDate", "2025-06-15"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(0));
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].title").value("Native Survives"))
+                .andExpect(jsonPath("$.data[0].source").value("NATIVE"));
 
         // Verify synced calendar rows are gone
         try (var conn = dataSource.getConnection();
