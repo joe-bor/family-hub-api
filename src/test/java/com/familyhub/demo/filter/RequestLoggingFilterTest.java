@@ -69,6 +69,34 @@ class RequestLoggingFilterTest {
     }
 
     @Test
+    void rejectsOversizedCorrelationId() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/events");
+        request.addHeader("X-Correlation-ID", "a".repeat(65));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        String[] capturedId = {null};
+        FilterChain chain = (req, res) -> capturedId[0] = MDC.get("correlationId");
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(capturedId[0]).hasSize(36); // falls back to UUID
+    }
+
+    @Test
+    void stripsNewlinesFromCorrelationId() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/events");
+        request.addHeader("X-Correlation-ID", "valid-id\r\ninjected-header");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        String[] capturedId = {null};
+        FilterChain chain = (req, res) -> capturedId[0] = MDC.get("correlationId");
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(capturedId[0]).doesNotContain("\r", "\n");
+    }
+
+    @Test
     void skipsHealthEndpoint() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/health");
         MockHttpServletResponse response = new MockHttpServletResponse();

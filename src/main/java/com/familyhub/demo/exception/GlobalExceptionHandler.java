@@ -82,12 +82,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .map(error -> new ErrorResponse.ValidationError(error.getField(), error.getDefaultMessage()))
                 .toList();
 
-        log.warn("Validation failed: {} {}, errors={}",
-                ((ServletWebRequest) request).getRequest().getMethod(),
-                ((ServletWebRequest) request).getRequest().getRequestURI(),
-                errorList);
+        // WebRequest parameter is required by the ResponseEntityExceptionHandler override signature
+        HttpServletRequest servletRequest = ((ServletWebRequest) request).getRequest();
 
-        String path = ((ServletWebRequest) request).getRequest().getRequestURI();
+        log.warn("Validation failed: {} {}, errors={}",
+                servletRequest.getMethod(), servletRequest.getRequestURI(), errorList);
+
+        String path = servletRequest.getRequestURI();
 
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.BAD_REQUEST.value(),
