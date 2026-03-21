@@ -24,6 +24,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex, HttpServletRequest request) {
+        log.warn("Resource not found: {} {}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(
                 HttpStatus.NOT_FOUND,
                 request,
@@ -33,6 +34,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(UsernameAlreadyExists.class)
     public ResponseEntity<ErrorResponse> handleUsernameAlreadyExist(UsernameAlreadyExists ex, HttpServletRequest request) {
+        log.warn("Conflict: {} {}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(
                 HttpStatus.CONFLICT,
                 request,
@@ -42,6 +44,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(InvalidCredentialException.class)
     public ResponseEntity<ErrorResponse> handleInvalidCredential(InvalidCredentialException ex, HttpServletRequest request) {
+        log.warn("Authentication failed: {} {}", request.getMethod(), request.getRequestURI());
         return buildErrorResponse(
                 HttpStatus.UNAUTHORIZED,
                 request,
@@ -51,7 +54,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, HttpServletRequest request) {
-        log.error("Unexpected error occurred: ", ex);
+        log.error("Unhandled exception: {} {}", request.getMethod(), request.getRequestURI(), ex);
         return buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 request,
@@ -61,11 +64,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        log.warn("Access denied: {} {}", request.getMethod(), request.getRequestURI());
         return buildErrorResponse(HttpStatus.FORBIDDEN, request, ex.getMessage());
     }
 
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorResponse> handleBadRequest(BadRequestException ex, HttpServletRequest request) {
+        log.warn("Bad request: {} {}, message={}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return buildErrorResponse(HttpStatus.BAD_REQUEST, request, ex.getMessage());
     }
 
@@ -76,6 +81,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .stream()
                 .map(error -> new ErrorResponse.ValidationError(error.getField(), error.getDefaultMessage()))
                 .toList();
+
+        log.warn("Validation failed: {} {}, errors={}",
+                ((ServletWebRequest) request).getRequest().getMethod(),
+                ((ServletWebRequest) request).getRequest().getRequestURI(),
+                errorList);
 
         String path = ((ServletWebRequest) request).getRequest().getRequestURI();
 
