@@ -138,6 +138,8 @@ public class CalendarEventService {
         validateEvent(calendarEvent);
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
+        log.info("Calendar event created, eventId={}, familyId={}, memberId={}",
+                saved.getId(), family.getId(), familyMember.getId());
 
         return CalendarEventMapper.toDto(saved);
 
@@ -174,6 +176,7 @@ public class CalendarEventService {
         calendarEvent.setDescription(update.getDescription());
 
         CalendarEvent saved = calendarEventRepository.save(calendarEvent);
+        log.info("Calendar event updated, eventId={}, familyId={}", saved.getId(), family.getId());
 
         return CalendarEventMapper.toDto(saved);
     }
@@ -185,6 +188,7 @@ public class CalendarEventService {
         rejectGoogleEvent(calendarEvent);
 
         calendarEventRepository.delete(calendarEvent);
+        log.info("Calendar event deleted, eventId={}, familyId={}", id, family.getId());
     }
 
     @Transactional
@@ -230,6 +234,8 @@ public class CalendarEventService {
         exception.setDescription(update.getDescription());
 
         CalendarEvent saved = calendarEventRepository.save(exception);
+        log.info("Recurring instance edited, parentId={}, date={}, exceptionId={}",
+                parentId, date, saved.getId());
         return CalendarEventMapper.toDto(saved);
     }
 
@@ -261,6 +267,7 @@ public class CalendarEventService {
 
         exception.setCancelled(true);
         calendarEventRepository.save(exception);
+        log.info("Recurring instance cancelled, parentId={}, date={}", parentId, date);
     }
 
     private void validateInstanceDate(CalendarEvent parent, LocalDate date) {

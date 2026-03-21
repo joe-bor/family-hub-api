@@ -11,10 +11,12 @@ import com.familyhub.demo.mapper.FamilyMemberMapper;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.repository.FamilyRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -40,6 +42,7 @@ public class AuthService {
                         .toList()
         );
         Family saved = familyRepository.saveAndFlush(family);
+        log.info("Family registered, familyId={}, username={}", saved.getId(), saved.getUsername());
 
         // Create JWT and return response
         String token = jwtService.generateToken(saved);
@@ -57,6 +60,7 @@ public class AuthService {
         }
 
         String token = jwtService.generateToken(family);
+        log.info("Family logged in, familyId={}, username={}", family.getId(), family.getUsername());
         return new AuthResponse(token, FamilyMapper.toDto(family));
     }
 
