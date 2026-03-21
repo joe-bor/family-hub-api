@@ -38,7 +38,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
             try {
                 filterChain.doFilter(request, response);
             } finally {
-                MDC.clear();
+                MDC.remove(CORRELATION_ID_MDC_KEY);
             }
             return;
         }
@@ -55,7 +55,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                     request.getMethod(), request.getRequestURI(),
                     wrappedResponse.getStatus(), duration);
             wrappedResponse.copyBodyToResponse();
-            MDC.clear();
+            MDC.remove(CORRELATION_ID_MDC_KEY);
         }
     }
 }
