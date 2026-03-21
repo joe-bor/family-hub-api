@@ -10,11 +10,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: true
     open-in-view: false
-    properties:
-      hibernate:
-        format_sql: true
 
   flyway:
     enabled: true
