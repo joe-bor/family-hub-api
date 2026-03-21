@@ -1,5 +1,6 @@
 package com.familyhub.demo.config;
 
+import com.familyhub.demo.filter.RequestLoggingFilter;
 import com.familyhub.demo.security.JwtAuthenticationEntryPoint;
 import com.familyhub.demo.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ import java.util.List;
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
+    private final RequestLoggingFilter requestLoggingFilter;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
@@ -42,6 +44,7 @@ public class SecurityConfig {
                 .frameOptions(frameOptions -> frameOptions.disable()) // Required for H2 console
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(requestLoggingFilter, JwtAuthenticationFilter.class)
             .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/h2-console/**").permitAll()
