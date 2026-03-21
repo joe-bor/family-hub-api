@@ -9,6 +9,7 @@ import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -40,6 +42,7 @@ public class FamilyMemberService {
     @Transactional
     public FamilyMemberResponse addFamilyMember(Family family, FamilyMemberRequest toAdd) {
         FamilyMember saved = familyMemberRepository.save(FamilyMemberMapper.toEntity(toAdd, family));
+        log.info("Family member created, memberId={}, familyId={}", saved.getId(), family.getId());
         return FamilyMemberMapper.toDto(saved);
     }
 
@@ -65,6 +68,7 @@ public class FamilyMemberService {
 
         // Save
         FamilyMember saved = familyMemberRepository.save(toBeUpdated);
+        log.info("Family member updated, memberId={}, familyId={}", saved.getId(), family.getId());
         return FamilyMemberMapper.toDto(saved);
     }
 
@@ -79,6 +83,7 @@ public class FamilyMemberService {
         }
 
         familyMemberRepository.delete(toBeDeleted);
+        log.info("Family member deleted, memberId={}, familyId={}", familyMemberId, family.getId());
     }
 
     // -- Helper methods --
