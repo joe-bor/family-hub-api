@@ -67,7 +67,7 @@ class GoogleOAuthIntegrationTest {
                         .header("Authorization", "Bearer " + token)
                         .param("memberId", memberId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.authorizationUrl").exists());
+                .andExpect(jsonPath("$.data.url").exists());
     }
 
     @Test
