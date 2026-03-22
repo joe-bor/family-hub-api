@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.1.0](https://github.com/joe-bor/family-hub-api/compare/v1.0.1...v1.1.0) (2026-03-22)
+
+
+### Features
+
+* **logging:** add business event logging to service layer ([82f5217](https://github.com/joe-bor/family-hub-api/commit/82f521713e4ea0d4d3e26edebc60312ec7bfbe8b))
+* **logging:** add request logging filter with correlation ID via MDC ([e69ad65](https://github.com/joe-bor/family-hub-api/commit/e69ad651d162cba311f01cba343b7f4e5056cbea))
+* **logging:** add WARN/ERROR logging to GlobalExceptionHandler ([915864d](https://github.com/joe-bor/family-hub-api/commit/915864deb0fd1d2cfdc62c7ffe0b165717687bd2))
+
+
+### Bug Fixes
+
+* **google-auth:** replace Map.of with typed GoogleAuthUrlResponse DTO ([314924a](https://github.com/joe-bor/family-hub-api/commit/314924a3a3962386fdd73b22a3716015078b751a))
+* **logging:** address PR review feedback ([b942919](https://github.com/joe-bor/family-hub-api/commit/b9429191094d371739519c4e675a1b3cf3074628))
+* **logging:** remove trailing space in request log format string ([517b4c8](https://github.com/joe-bor/family-hub-api/commit/517b4c8928a8e5d6598d495673327477fb59e308))
+* **logging:** use MDC.remove() instead of MDC.clear() to avoid wiping other MDC keys ([b8b6d3d](https://github.com/joe-bor/family-hub-api/commit/b8b6d3da60d6ac6be0c3cfd1b955e03e40d5c1b4))
+
+
+### Tests
+
+* **google-auth:** update integration test for renamed url field ([c93bff7](https://github.com/joe-bor/family-hub-api/commit/c93bff7be25358d33e20d0a55a92e4564f4480b8))
+
 ## [1.0.1](https://github.com/joe-bor/family-hub-api/compare/v1.0.0...v1.0.1) (2026-03-20)
 
 
