@@ -62,7 +62,7 @@ class GoogleOAuthControllerTest {
 
         mockMvc.perform(get("/api/google/auth").param("memberId", MEMBER_ID.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.authorizationUrl").value(
+                .andExpect(jsonPath("$.data.url").value(
                         "https://accounts.google.com/o/oauth2/v2/auth?client_id=test"));
     }
 

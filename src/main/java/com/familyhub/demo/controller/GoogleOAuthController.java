@@ -2,6 +2,7 @@ package com.familyhub.demo.controller;
 
 import com.familyhub.demo.config.GoogleOAuthConfig;
 import com.familyhub.demo.dto.ApiResponse;
+import com.familyhub.demo.dto.GoogleAuthUrlResponse;
 import com.familyhub.demo.dto.GoogleConnectionStatus;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.model.Family;
@@ -14,7 +15,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -27,14 +27,14 @@ public class GoogleOAuthController {
     private final FamilyMemberService familyMemberService;
 
     @GetMapping("/auth")
-    public ResponseEntity<ApiResponse<Map<String, String>>> getAuthorizationUrl(
+    public ResponseEntity<ApiResponse<GoogleAuthUrlResponse>> getAuthorizationUrl(
             @RequestParam UUID memberId,
             @AuthenticationPrincipal Family family) {
         familyMemberService.findById(family, memberId);
 
         String url = googleOAuthService.buildAuthorizationUrl(memberId);
         return ResponseEntity.ok(new ApiResponse<>(
-                Map.of("authorizationUrl", url),
+                new GoogleAuthUrlResponse(url),
                 "Authorization URL generated"));
     }
 
