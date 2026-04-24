@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.1.0](https://github.com/joe-bor/family-hub-api/compare/v1.0.1...v1.1.0) (2026-04-24)
+
+
+### Features
+
+* **logging:** add business event logging to service layer ([82f5217](https://github.com/joe-bor/family-hub-api/commit/82f521713e4ea0d4d3e26edebc60312ec7bfbe8b))
+* **logging:** add request logging filter with correlation ID via MDC ([e69ad65](https://github.com/joe-bor/family-hub-api/commit/e69ad651d162cba311f01cba343b7f4e5056cbea))
+* **logging:** add WARN/ERROR logging to GlobalExceptionHandler ([915864d](https://github.com/joe-bor/family-hub-api/commit/915864deb0fd1d2cfdc62c7ffe0b165717687bd2))
+
+
+### Bug Fixes
+
+* **ci:** pin actions/add-to-project to v1.0.2 (no v1 tag exists) ([#38](https://github.com/joe-bor/family-hub-api/issues/38)) ([dc53545](https://github.com/joe-bor/family-hub-api/commit/dc5354570b3d4f4646486c03477d54af1a22b676))
+* **google-auth:** replace Map.of with typed GoogleAuthUrlResponse DTO ([314924a](https://github.com/joe-bor/family-hub-api/commit/314924a3a3962386fdd73b22a3716015078b751a))
+* **logging:** address PR review feedback ([b942919](https://github.com/joe-bor/family-hub-api/commit/b9429191094d371739519c4e675a1b3cf3074628))
+* **logging:** remove trailing space in request log format string ([517b4c8](https://github.com/joe-bor/family-hub-api/commit/517b4c8928a8e5d6598d495673327477fb59e308))
+* **logging:** use MDC.remove() instead of MDC.clear() to avoid wiping other MDC keys ([b8b6d3d](https://github.com/joe-bor/family-hub-api/commit/b8b6d3da60d6ac6be0c3cfd1b955e03e40d5c1b4))
+
+
+### Documentation
+
+* add mentor-first CLAUDE.md with cross-repo product pointer ([#39](https://github.com/joe-bor/family-hub-api/issues/39)) ([a2f879a](https://github.com/joe-bor/family-hub-api/commit/a2f879a808ab80f32e68a4533452b08ba55409fb))
+
+
+### Tests
+
+* **google-auth:** update integration test for renamed url field ([c93bff7](https://github.com/joe-bor/family-hub-api/commit/c93bff7be25358d33e20d0a55a92e4564f4480b8))
+
 ## [1.0.1](https://github.com/joe-bor/family-hub-api/compare/v1.0.0...v1.0.1) (2026-03-20)
 
 
