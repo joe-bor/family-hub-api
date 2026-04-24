@@ -1,6 +1,6 @@
 # Family Hub API — Agent Entry Point
 
-Compatibility entry for Claude Code. `AGENTS.md` is the canonical agent entry for this backend repo. If the two files ever drift, treat `AGENTS.md` as canonical.
+Canonical agent entry for this backend repo. `CLAUDE.md` is a compatibility entry for Claude Code. If the two files ever drift, treat `AGENTS.md` as canonical.
 
 ## Product source of truth (cross-repo)
 
