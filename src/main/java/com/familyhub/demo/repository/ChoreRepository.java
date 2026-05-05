@@ -15,5 +15,12 @@ public interface ChoreRepository extends JpaRepository<Chore, UUID> {
     @Query("select c from Chore c join fetch c.assignedToMember m where c.family = :family and m.family = :family")
     List<Chore> findByFamilyWithAssignee(@Param("family") Family family);
 
-    Optional<Chore> findByFamilyAndId(Family family, UUID id);
+    @Query("""
+            select c from Chore c
+            join fetch c.assignedToMember m
+            where c.family = :family
+              and c.id = :id
+              and m.family = :family
+            """)
+    Optional<Chore> findByFamilyAndId(@Param("family") Family family, @Param("id") UUID id);
 }
