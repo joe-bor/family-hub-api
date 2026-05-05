@@ -2,6 +2,7 @@ package com.familyhub.demo;
 
 import com.familyhub.demo.dto.*;
 import com.familyhub.demo.model.CalendarEvent;
+import com.familyhub.demo.model.Chore;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyColor;
 import com.familyhub.demo.model.FamilyMember;
@@ -17,6 +18,7 @@ public final class TestDataFactory {
     public static final UUID FAMILY_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     public static final UUID MEMBER_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
     public static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000003");
+    public static final UUID CHORE_ID = UUID.fromString("00000000-0000-0000-0000-000000000004");
     public static final UUID OTHER_FAMILY_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
 
     private TestDataFactory() {
@@ -219,5 +221,47 @@ public final class TestDataFactory {
                 .description(null)
                 .htmlLink(null)
                 .build();
+    }
+
+    public static CreateChoreRequest createChoreRequest(UUID memberId) {
+        return new CreateChoreRequest(
+                "🗑️ Take out trash",
+                memberId,
+                LocalDate.of(2026, 5, 5)
+        );
+    }
+
+    public static ChoreResponse sampleChoreResponse() {
+        return new ChoreResponse(
+                CHORE_ID,
+                "🗑️ Take out trash",
+                MEMBER_ID,
+                LocalDate.of(2026, 5, 5),
+                false,
+                null,
+                LocalDateTime.of(2026, 5, 5, 9, 0),
+                LocalDateTime.of(2026, 5, 5, 9, 0)
+        );
+    }
+
+    public static Chore createChore(Family family, FamilyMember member) {
+        Chore chore = new Chore();
+        chore.setId(CHORE_ID);
+        chore.setFamily(family);
+        chore.setAssignedToMember(member);
+        chore.setTitle("🗑️ Take out trash");
+        chore.setDueDate(LocalDate.of(2026, 5, 5));
+        chore.setCompleted(false);
+        chore.setCompletedAt(null);
+        chore.setCreatedAt(LocalDateTime.of(2026, 5, 5, 9, 0));
+        chore.setUpdatedAt(LocalDateTime.of(2026, 5, 5, 9, 0));
+        return chore;
+    }
+
+    public static Chore createCompletedChore(Family family, FamilyMember member) {
+        Chore chore = createChore(family, member);
+        chore.setCompleted(true);
+        chore.setCompletedAt(LocalDateTime.of(2026, 5, 5, 10, 0));
+        return chore;
     }
 }
