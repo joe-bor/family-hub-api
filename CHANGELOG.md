@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/joe-bor/family-hub-api/compare/v1.1.0...v1.2.0) (2026-05-05)
+
+
+### Features
+
+* **chores:** add chore integration coverage ([9cb2d91](https://github.com/joe-bor/family-hub-api/commit/9cb2d911095e38fd4cda00ed64e6df33a421d3a2))
+* **chores:** implement family chore endpoints ([a88da81](https://github.com/joe-bor/family-hub-api/commit/a88da8147457852f7a7c51c05f6627f4f10a62a7))
+
+
+### Bug Fixes
+
+* **chores:** enforce assignee family invariant ([056ac9a](https://github.com/joe-bor/family-hub-api/commit/056ac9a42df8260ea7ac290c35d1b35554b47c93))
+
 ## [1.1.0](https://github.com/joe-bor/family-hub-api/compare/v1.0.1...v1.1.0) (2026-04-24)
 
 
