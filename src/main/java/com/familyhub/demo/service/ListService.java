@@ -14,8 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -68,10 +66,6 @@ public class ListService {
     @Transactional
     public ListItemResponse createItem(UUID listId, CreateListItemRequest request, Family family) {
         SharedList list = getListOrThrow(listId, family);
-        Set<UUID> existingItemIds = list.getItems().stream()
-                .map(SharedListItem::getId)
-                .filter(Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
         ListCategory category = resolveCategory(list, request.categoryId());
 
         SharedListItem item = new SharedListItem();
@@ -82,13 +76,8 @@ public class ListService {
         item.setCategory(category);
         list.getItems().add(item);
 
-        sharedListRepository.saveAndFlush(list);
-        SharedList saved = getListOrThrow(listId, family);
-        SharedListItem savedItem = saved.getItems().stream()
-                .filter(candidate -> candidate.getId() != null && !existingItemIds.contains(candidate.getId()))
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("List Item", listId));
-        return ListMapper.toItemDto(savedItem);
+        SharedList saved = sharedListRepository.saveAndFlush(list);
+        return ListMapper.toItemDto(saved.getItems().getLast());
     }
 
     @Transactional
