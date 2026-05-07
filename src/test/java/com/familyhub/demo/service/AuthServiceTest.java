@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,6 +38,9 @@ class AuthServiceTest {
 
     @Mock
     private JwtService jwtService;
+
+    @Mock
+    private ListSeedService listSeedService;
 
     @InjectMocks
     private AuthService authService;
@@ -61,6 +65,19 @@ class AuthServiceTest {
 
         assertThat(result.token()).isEqualTo("jwt-token");
         assertThat(result.family().id()).isEqualTo(FAMILY_ID);
+    }
+
+    @Test
+    void register_success_seedsListsModuleDefaults() {
+        RegisterRequest request = createRegisterRequest();
+        when(familyRepository.existsByUsername(request.username())).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
+        when(familyRepository.saveAndFlush(any(Family.class))).thenReturn(family);
+        when(jwtService.generateToken(family)).thenReturn("jwt-token");
+
+        authService.register(request);
+
+        verify(listSeedService).seedDefaultsForFamily(family);
     }
 
     @Test
