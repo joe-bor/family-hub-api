@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.0](https://github.com/joe-bor/family-hub-api/compare/v1.2.0...v1.3.0) (2026-05-07)
+
+
+### Features
+
+* **lists:** add backend list endpoints ([6730377](https://github.com/joe-bor/family-hub-api/commit/673037725fabb50ba6eba9f41faa041505515c5c))
+* **lists:** seed backend list defaults ([03654d3](https://github.com/joe-bor/family-hub-api/commit/03654d39be468365ad8ba3ff3fdac15f15471ae4))
+
+
+### Code Refactoring
+
+* **lists:** drop createItem refetch and document PATCH semantics ([27649b5](https://github.com/joe-bor/family-hub-api/commit/27649b5bf2a0515ad5f354d684e894f204b99397))
+
+
+### Tests
+
+* **lists:** add backend list integration coverage ([f8295cd](https://github.com/joe-bor/family-hub-api/commit/f8295cdc4e5eee71d57d071237ea6e3e09950bd3))
+* **lists:** cover showCompletedOverride null round-trip ([1460f49](https://github.com/joe-bor/family-hub-api/commit/1460f49090ad7c1ee9242e409e2db006c9650a1c))
+
 ## [1.2.0](https://github.com/joe-bor/family-hub-api/compare/v1.1.0...v1.2.0) (2026-05-05)
 
 
