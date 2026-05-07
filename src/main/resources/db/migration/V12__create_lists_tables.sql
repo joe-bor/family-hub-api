@@ -64,6 +64,9 @@ CREATE TABLE shared_list_item (
         CHECK (list_kind <> 'GENERAL' OR category_id IS NULL)
 );
 
+CREATE INDEX idx_shared_list_family_id ON shared_list(family_id);
+CREATE INDEX idx_shared_list_item_list_id ON shared_list_item(list_id);
+
 INSERT INTO list_preferences (family_id, show_completed_by_default)
 SELECT id, TRUE
 FROM family
