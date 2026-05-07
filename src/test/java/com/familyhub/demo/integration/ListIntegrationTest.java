@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -107,6 +108,18 @@ class ListIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.categoryDisplayMode").value("flat"))
                 .andExpect(jsonPath("$.data.showCompletedOverride").value(true));
+
+        mockMvc.perform(patch("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "categoryDisplayMode": "flat",
+                                  "showCompletedOverride": null
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.showCompletedOverride").value(nullValue()));
 
         String detailBody = mockMvc.perform(get("/api/lists/{id}", listId)
                         .header("Authorization", "Bearer " + token))
