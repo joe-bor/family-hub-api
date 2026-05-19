@@ -3,10 +3,12 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.dto.FamilyMemberRequest;
 import com.familyhub.demo.dto.FamilyMemberResponse;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.mapper.FamilyMemberMapper;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
+import com.familyhub.demo.repository.ChoreTemplateRepository;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +25,7 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class FamilyMemberService {
     private final FamilyMemberRepository familyMemberRepository;
+    private final ChoreTemplateRepository choreTemplateRepository;
 
     public List<FamilyMemberResponse> findAllMembers(Family family) {
          return familyMemberRepository.findByFamily(family)
@@ -80,6 +83,10 @@ public class FamilyMemberService {
         // Check if the uuid passed as args belongs to authenticated family
         if (!isMemberOfFamily(family, toBeDeleted)) {
             throw new AccessDeniedException("Unauthorized");
+        }
+
+        if (choreTemplateRepository.existsByAssignedToMemberAndArchivedAtIsNull(toBeDeleted)) {
+            throw new BadRequestException("Reassign or archive this member's recurring chores before deleting them.");
         }
 
         familyMemberRepository.delete(toBeDeleted);

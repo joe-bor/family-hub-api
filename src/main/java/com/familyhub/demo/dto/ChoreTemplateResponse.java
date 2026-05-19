@@ -1,19 +1,18 @@
 package com.familyhub.demo.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
+import com.familyhub.demo.model.ChoreCadence;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-public record ChoreResponse(
+public record ChoreTemplateResponse(
         UUID id,
         String title,
         UUID assignedToMemberId,
-        @JsonFormat(pattern = "yyyy-MM-dd")
-        LocalDate dueDate,
-        boolean completed,
-        LocalDateTime completedAt,
+        ChoreCadence cadence,
+        LocalDate activeFrom,
+        boolean archived,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

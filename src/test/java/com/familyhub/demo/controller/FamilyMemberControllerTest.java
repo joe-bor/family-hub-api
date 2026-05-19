@@ -2,6 +2,7 @@ package com.familyhub.demo.controller;
 
 import com.familyhub.demo.config.SecurityConfig;
 import com.familyhub.demo.dto.FamilyMemberResponse;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyColor;
 import com.familyhub.demo.security.JwtAuthenticationEntryPoint;
@@ -117,9 +118,28 @@ class FamilyMemberControllerTest {
     }
 
     @Test
+    @WithMockFamily
+    void deleteMember_withActiveRecurringChores_returns400() throws Exception {
+        givenDeleteMemberThrows(new BadRequestException(
+                "Reassign or archive this member's recurring chores before deleting them."
+        ));
+
+        mockMvc.perform(delete("/api/family/members/{id}", MEMBER_ID))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("Reassign or archive this member's recurring chores before deleting them."));
+    }
+
+    @Test
     void getMembers_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/family/members"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.httpStatus").value(401));
+    }
+
+    private void givenDeleteMemberThrows(RuntimeException exception) {
+        org.mockito.BDDMockito.willThrow(exception)
+                .given(familyMemberService)
+                .deleteFamilyMember(any(Family.class), eq(MEMBER_ID));
     }
 }

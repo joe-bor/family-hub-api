@@ -1,80 +1,306 @@
 package com.familyhub.demo.service;
 
-import com.familyhub.demo.dto.ChoreResponse;
-import com.familyhub.demo.dto.CreateChoreRequest;
-import com.familyhub.demo.dto.UpdateChoreRequest;
+import com.familyhub.demo.dto.ChoreAssigneeGroupResponse;
+import com.familyhub.demo.dto.ChoreBoardItemResponse;
+import com.familyhub.demo.dto.ChoreBoardResponse;
+import com.familyhub.demo.dto.ChoreCurrentPeriodStateResponse;
+import com.familyhub.demo.dto.ChoreScopeBoardResponse;
+import com.familyhub.demo.dto.ChoreTemplateResponse;
+import com.familyhub.demo.dto.CreateChoreTemplateRequest;
+import com.familyhub.demo.dto.FamilyMemberResponse;
+import com.familyhub.demo.dto.UpdateChoreTemplateRequest;
+import com.familyhub.demo.dto.UpdateCurrentPeriodCompletionRequest;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
-import com.familyhub.demo.mapper.ChoreMapper;
-import com.familyhub.demo.model.Chore;
+import com.familyhub.demo.model.ChoreCadence;
+import com.familyhub.demo.model.ChorePeriodCompletion;
+import com.familyhub.demo.model.ChoreScope;
+import com.familyhub.demo.model.ChoreTemplate;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
-import com.familyhub.demo.repository.ChoreRepository;
+import com.familyhub.demo.repository.ChorePeriodCompletionRepository;
+import com.familyhub.demo.repository.ChoreTemplateRepository;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ChoreService {
-    private final ChoreRepository choreRepository;
+    private static final String DEFAULT_FAMILY_TIMEZONE = "America/Los_Angeles";
+    private static final String STALE_PERIOD_MESSAGE = "Chore period is stale. Refresh and try again.";
+
+    private final ChoreTemplateRepository choreTemplateRepository;
+    private final ChorePeriodCompletionRepository chorePeriodCompletionRepository;
     private final FamilyMemberRepository familyMemberRepository;
+    private final Clock clock;
 
-    public List<ChoreResponse> getChores(Family family) {
-        return choreRepository.findByFamilyWithAssignee(family)
-                .stream()
-                .map(ChoreMapper::toDto)
-                .toList();
+    public ChoreBoardResponse getBoard(Family family) {
+        LocalDate today = familyLocalToday(family);
+        List<ChoreTemplate> activeTemplates = choreTemplateRepository.findActiveByFamily(family);
+
+        ChoreScopeBoardResponse todayBoard = buildScopeBoard(
+                activeTemplates,
+                ChoreScope.TODAY,
+                today,
+                today
+        );
+
+        LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+        ChoreScopeBoardResponse weekBoard = buildScopeBoard(
+                activeTemplates,
+                ChoreScope.THIS_WEEK,
+                weekStart,
+                weekStart.plusDays(6)
+        );
+
+        LocalDate monthStart = today.withDayOfMonth(1);
+        ChoreScopeBoardResponse monthBoard = buildScopeBoard(
+                activeTemplates,
+                ChoreScope.THIS_MONTH,
+                monthStart,
+                today.withDayOfMonth(today.lengthOfMonth())
+        );
+
+        return new ChoreBoardResponse(resolveTimezone(family), todayBoard, weekBoard, monthBoard);
     }
 
     @Transactional
-    public ChoreResponse createChore(CreateChoreRequest request, Family family) {
-        FamilyMember assignedToMember = resolveFamilyMember(family, request.assignedToMemberId());
+    public ChoreTemplateResponse createTemplate(CreateChoreTemplateRequest request, Family family) {
+        FamilyMember assignedToMember = requireAssignedMember(family, request.assignedToMemberId());
 
-        Chore chore = new Chore();
-        chore.setFamily(family);
-        chore.setAssignedToMember(assignedToMember);
-        chore.setTitle(request.title().trim());
-        chore.setDueDate(request.dueDate());
-        chore.setCompleted(false);
-        chore.setCompletedAt(null);
+        ChoreTemplate template = new ChoreTemplate();
+        template.setFamily(family);
+        template.setAssignedToMember(assignedToMember);
+        template.setTitle(request.title().trim());
+        template.setCadence(request.cadence());
+        template.setActiveFrom(request.activeFrom());
 
-        return ChoreMapper.toDto(choreRepository.save(chore));
+        return toTemplateResponse(choreTemplateRepository.save(template));
     }
 
     @Transactional
-    public ChoreResponse updateChore(UUID id, UpdateChoreRequest request, Family family) {
-        Chore chore = choreRepository.findByFamilyAndId(family, id)
-                .orElseThrow(() -> new ResourceNotFoundException("Chore", id));
+    public ChoreTemplateResponse updateTemplate(UUID templateId, UpdateChoreTemplateRequest request, Family family) {
+        ChoreTemplate template = choreTemplateRepository.findByFamilyAndId(family, templateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Chore Template", templateId));
 
-        boolean completed = Boolean.TRUE.equals(request.completed());
-        chore.setCompleted(completed);
-        if (completed) {
-            if (chore.getCompletedAt() == null) {
-                chore.setCompletedAt(LocalDateTime.now());
+        if (request.title() != null) {
+            if (request.title().isBlank()) {
+                throw new BadRequestException("Chore title is required");
             }
-        } else {
-            chore.setCompletedAt(null);
+            template.setTitle(request.title().trim());
+        }
+        if (request.assignedToMemberId() != null) {
+            template.setAssignedToMember(requireAssignedMember(family, request.assignedToMemberId()));
+        }
+        if (request.cadence() != null) {
+            template.setCadence(request.cadence());
+        }
+        if (request.activeFrom() != null) {
+            template.setActiveFrom(request.activeFrom());
+        }
+        if (request.archived() != null) {
+            template.setArchivedAt(Boolean.TRUE.equals(request.archived()) ? LocalDateTime.now(clock) : null);
         }
 
-        return ChoreMapper.toDto(choreRepository.save(chore));
+        return toTemplateResponse(choreTemplateRepository.save(template));
     }
 
     @Transactional
-    public void deleteChore(UUID id, Family family) {
-        Chore chore = choreRepository.findByFamilyAndId(family, id)
-                .orElseThrow(() -> new ResourceNotFoundException("Chore", id));
+    public ChoreCurrentPeriodStateResponse completeCurrentPeriod(
+            UUID templateId,
+            UpdateCurrentPeriodCompletionRequest request,
+            Family family
+    ) {
+        ChoreTemplate template = requireTemplate(family, templateId);
+        ResolvedPeriod period = resolveCurrentPeriod(template, family);
+        assertFreshPeriod(request, period);
 
-        choreRepository.delete(chore);
+        ChorePeriodCompletion completion = chorePeriodCompletionRepository
+                .findByChoreTemplateAndPeriodStartDateAndPeriodEndDate(
+                        template,
+                        period.periodStartDate(),
+                        period.periodEndDate()
+                )
+                .orElseGet(() -> {
+                    ChorePeriodCompletion created = new ChorePeriodCompletion();
+                    created.setChoreTemplate(template);
+                    created.setPeriodStartDate(period.periodStartDate());
+                    created.setPeriodEndDate(period.periodEndDate());
+                    created.setCompletedAt(LocalDateTime.now(clock));
+                    return created;
+                });
+
+        ChorePeriodCompletion saved = chorePeriodCompletionRepository.save(completion);
+        return new ChoreCurrentPeriodStateResponse(
+                period.scope(),
+                period.periodStartDate(),
+                period.periodEndDate(),
+                toBoardItem(template, saved)
+        );
     }
 
-    private FamilyMember resolveFamilyMember(Family family, UUID memberId) {
+    @Transactional
+    public ChoreCurrentPeriodStateResponse uncompleteCurrentPeriod(
+            UUID templateId,
+            UpdateCurrentPeriodCompletionRequest request,
+            Family family
+    ) {
+        ChoreTemplate template = requireTemplate(family, templateId);
+        ResolvedPeriod period = resolveCurrentPeriod(template, family);
+        assertFreshPeriod(request, period);
+
+        chorePeriodCompletionRepository
+                .findByChoreTemplateAndPeriodStartDateAndPeriodEndDate(
+                        template,
+                        period.periodStartDate(),
+                        period.periodEndDate()
+                )
+                .ifPresent(chorePeriodCompletionRepository::delete);
+
+        return new ChoreCurrentPeriodStateResponse(
+                period.scope(),
+                period.periodStartDate(),
+                period.periodEndDate(),
+                toBoardItem(template, null)
+        );
+    }
+
+    private ChoreScopeBoardResponse buildScopeBoard(
+            List<ChoreTemplate> activeTemplates,
+            ChoreScope scope,
+            LocalDate periodStart,
+            LocalDate periodEnd
+    ) {
+        List<ChoreTemplate> scopeTemplates = activeTemplates.stream()
+                .filter(template -> scopeFor(template.getCadence()) == scope)
+                .filter(template -> !template.getActiveFrom().isAfter(periodEnd))
+                .toList();
+
+        Map<UUID, ChorePeriodCompletion> completionsByTemplateId = completionsByTemplateId(
+                scopeTemplates,
+                periodStart,
+                periodEnd
+        );
+
+        List<FamilyMember> assignees = scopeTemplates.stream()
+                .map(ChoreTemplate::getAssignedToMember)
+                .collect(Collectors.toMap(
+                        FamilyMember::getId,
+                        Function.identity(),
+                        (first, ignored) -> first
+                ))
+                .values()
+                .stream()
+                .sorted(memberComparator())
+                .toList();
+
+        List<ChoreAssigneeGroupResponse> groups = assignees.stream()
+                .map(member -> buildAssigneeGroup(member, scopeTemplates, completionsByTemplateId))
+                .toList();
+
+        int total = groups.stream().mapToInt(group -> group.summary().total()).sum();
+        int completed = groups.stream().mapToInt(group -> group.summary().completed()).sum();
+
+        return new ChoreScopeBoardResponse(
+                scope,
+                periodStart,
+                periodEnd,
+                new ChoreScopeBoardResponse.Summary(total, completed, total - completed),
+                groups
+        );
+    }
+
+    private Map<UUID, ChorePeriodCompletion> completionsByTemplateId(
+            List<ChoreTemplate> templates,
+            LocalDate periodStart,
+            LocalDate periodEnd
+    ) {
+        if (templates.isEmpty()) {
+            return Map.of();
+        }
+
+        List<UUID> templateIds = templates.stream()
+                .map(ChoreTemplate::getId)
+                .toList();
+
+        return chorePeriodCompletionRepository.findByTemplateIdsAndPeriod(templateIds, periodStart, periodEnd)
+                .stream()
+                .collect(Collectors.toMap(
+                        completion -> completion.getChoreTemplate().getId(),
+                        Function.identity()
+                ));
+    }
+
+    private ChoreAssigneeGroupResponse buildAssigneeGroup(
+            FamilyMember member,
+            List<ChoreTemplate> templates,
+            Map<UUID, ChorePeriodCompletion> completionsByTemplateId
+    ) {
+        List<ChoreBoardItemResponse> chores = templates.stream()
+                .filter(template -> template.getAssignedToMember().getId().equals(member.getId()))
+                .sorted(templateComparator(completionsByTemplateId))
+                .map(template -> toBoardItem(template, completionsByTemplateId.get(template.getId())))
+                .toList();
+
+        int total = chores.size();
+        int completed = (int) chores.stream().filter(ChoreBoardItemResponse::completed).count();
+
+        return new ChoreAssigneeGroupResponse(
+                FamilyMemberResponse.toDto(member),
+                new ChoreAssigneeGroupResponse.Summary(total, completed, total - completed),
+                chores
+        );
+    }
+
+    private Comparator<ChoreTemplate> templateComparator(Map<UUID, ChorePeriodCompletion> completionsByTemplateId) {
+        return Comparator
+                .comparing((ChoreTemplate template) -> completionsByTemplateId.containsKey(template.getId()))
+                .thenComparing(
+                        ChoreTemplate::getCreatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())
+                )
+                .thenComparing(template -> template.getTitle().toLowerCase(Locale.ROOT))
+                .thenComparing(template -> template.getId().toString());
+    }
+
+    private Comparator<FamilyMember> memberComparator() {
+        return Comparator
+                .comparing((FamilyMember member) -> member.getName().toLowerCase(Locale.ROOT))
+                .thenComparing(member -> member.getId().toString());
+    }
+
+    private ChoreScope scopeFor(ChoreCadence cadence) {
+        return switch (cadence) {
+            case DAILY -> ChoreScope.TODAY;
+            case WEEKLY -> ChoreScope.THIS_WEEK;
+            case MONTHLY -> ChoreScope.THIS_MONTH;
+        };
+    }
+
+    private ChoreTemplate requireTemplate(Family family, UUID templateId) {
+        return choreTemplateRepository.findByFamilyAndId(family, templateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Chore Template", templateId));
+    }
+
+    private FamilyMember requireAssignedMember(Family family, UUID memberId) {
         FamilyMember member = familyMemberRepository.findById(memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("Family Member", memberId));
 
@@ -83,5 +309,66 @@ public class ChoreService {
         }
 
         return member;
+    }
+
+    private ResolvedPeriod resolveCurrentPeriod(ChoreTemplate template, Family family) {
+        LocalDate today = familyLocalToday(family);
+        return switch (template.getCadence()) {
+            case DAILY -> new ResolvedPeriod(ChoreScope.TODAY, today, today);
+            case WEEKLY -> {
+                LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+                yield new ResolvedPeriod(ChoreScope.THIS_WEEK, weekStart, weekStart.plusDays(6));
+            }
+            case MONTHLY -> {
+                LocalDate monthStart = today.withDayOfMonth(1);
+                yield new ResolvedPeriod(ChoreScope.THIS_MONTH, monthStart, today.withDayOfMonth(today.lengthOfMonth()));
+            }
+        };
+    }
+
+    private void assertFreshPeriod(UpdateCurrentPeriodCompletionRequest request, ResolvedPeriod period) {
+        if (request.scope() != period.scope() || !request.periodStartDate().equals(period.periodStartDate())) {
+            throw new BadRequestException(STALE_PERIOD_MESSAGE);
+        }
+    }
+
+    private LocalDate familyLocalToday(Family family) {
+        return LocalDate.now(clock.withZone(ZoneId.of(resolveTimezone(family))));
+    }
+
+    private String resolveTimezone(Family family) {
+        String timezone = family.getTimezone();
+        return timezone == null || timezone.isBlank() ? DEFAULT_FAMILY_TIMEZONE : timezone;
+    }
+
+    private ChoreBoardItemResponse toBoardItem(ChoreTemplate template, ChorePeriodCompletion completion) {
+        return new ChoreBoardItemResponse(
+                template.getId(),
+                template.getTitle(),
+                template.getCadence(),
+                template.getAssignedToMember().getId(),
+                completion != null,
+                completion != null ? completion.getCompletedAt() : null
+        );
+    }
+
+    private ChoreTemplateResponse toTemplateResponse(ChoreTemplate template) {
+        return new ChoreTemplateResponse(
+                template.getId(),
+                template.getTitle(),
+                template.getAssignedToMember().getId(),
+                template.getCadence(),
+                template.getActiveFrom(),
+                template.getArchivedAt() != null,
+                template.getCreatedAt(),
+                template.getUpdatedAt()
+        );
+    }
+
+    private record ResolvedPeriod(
+            ChoreScope scope,
+            LocalDate periodStartDate,
+            LocalDate periodEndDate
+    ) {
     }
 }
