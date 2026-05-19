@@ -22,6 +22,7 @@ import java.util.Optional;
 import static com.familyhub.demo.TestDataFactory.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
@@ -78,6 +79,48 @@ class AuthServiceTest {
         authService.register(request);
 
         verify(listSeedService).seedDefaultsForFamily(family);
+    }
+
+    @Test
+    void register_withExplicitTimezone_persistsTimezone() {
+        RegisterRequest request = new RegisterRequest(
+                "smithfamily",
+                "password123",
+                "Smith Family",
+                List.of(createFamilyMemberRequest()),
+                "America/Chicago"
+        );
+        when(familyRepository.existsByUsername(request.username())).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
+        when(familyRepository.saveAndFlush(any(Family.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jwtService.generateToken(any(Family.class))).thenReturn("jwt-token");
+
+        authService.register(request);
+
+        verify(familyRepository).saveAndFlush(argThat(saved ->
+                "America/Chicago".equals(saved.getTimezone())
+        ));
+    }
+
+    @Test
+    void register_withoutTimezone_fallsBackToPacificDefault() {
+        RegisterRequest request = new RegisterRequest(
+                "smithfamily",
+                "password123",
+                "Smith Family",
+                List.of(createFamilyMemberRequest()),
+                null
+        );
+        when(familyRepository.existsByUsername(request.username())).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
+        when(familyRepository.saveAndFlush(any(Family.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jwtService.generateToken(any(Family.class))).thenReturn("jwt-token");
+
+        authService.register(request);
+
+        verify(familyRepository).saveAndFlush(argThat(saved ->
+                "America/Los_Angeles".equals(saved.getTimezone())
+        ));
     }
 
     @Test

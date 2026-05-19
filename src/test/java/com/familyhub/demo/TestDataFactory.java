@@ -88,7 +88,8 @@ public final class TestDataFactory {
                 "testfamily",
                 "password123",
                 "Test Family",
-                List.of(createFamilyMemberRequest())
+                List.of(createFamilyMemberRequest()),
+                "America/Los_Angeles"
         );
     }
 

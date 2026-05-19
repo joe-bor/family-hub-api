@@ -23,5 +23,8 @@ public record RegisterRequest(
     String familyName,
 
     @NotEmpty(message = "A family must have at least one member")
-    List<@Valid FamilyMemberRequest> members
+    List<@Valid FamilyMemberRequest> members,
+
+    @Size(max = 100, message = "Timezone must be 100 characters or less")
+    String timezone
 ){}

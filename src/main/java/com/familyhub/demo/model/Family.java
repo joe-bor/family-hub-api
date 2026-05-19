@@ -36,6 +36,9 @@ public class Family implements UserDetails {
     @Column(nullable = false)
     private String passwordHash;
 
+    @Column(nullable = false, length = 100)
+    private String timezone = "America/Los_Angeles";
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 
