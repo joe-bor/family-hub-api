@@ -2,9 +2,11 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.dto.FamilyMemberRequest;
 import com.familyhub.demo.dto.FamilyMemberResponse;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.FamilyMember;
+import com.familyhub.demo.repository.ChoreTemplateRepository;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,9 @@ class FamilyMemberServiceTest {
 
     @Mock
     private FamilyMemberRepository familyMemberRepository;
+
+    @Mock
+    private ChoreTemplateRepository choreTemplateRepository;
 
     @InjectMocks
     private FamilyMemberService familyMemberService;
@@ -128,10 +133,21 @@ class FamilyMemberServiceTest {
     @Test
     void deleteFamilyMember_success() {
         when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(choreTemplateRepository.existsByAssignedToMemberAndArchivedAtIsNull(member)).thenReturn(false);
 
         familyMemberService.deleteFamilyMember(family, MEMBER_ID);
 
         verify(familyMemberRepository).delete(member);
+    }
+
+    @Test
+    void deleteFamilyMember_withActiveRecurringChores_throwsBadRequest() {
+        when(familyMemberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(choreTemplateRepository.existsByAssignedToMemberAndArchivedAtIsNull(member)).thenReturn(true);
+
+        assertThatThrownBy(() -> familyMemberService.deleteFamilyMember(family, MEMBER_ID))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Reassign or archive this member's recurring chores before deleting them.");
     }
 
     @Test
