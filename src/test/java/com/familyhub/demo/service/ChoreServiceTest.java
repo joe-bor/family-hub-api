@@ -53,6 +53,9 @@ class ChoreServiceTest {
     private ChorePeriodCompletionRepository chorePeriodCompletionRepository;
 
     @Mock
+    private ChorePeriodCompletionWriter chorePeriodCompletionWriter;
+
+    @Mock
     private FamilyMemberRepository familyMemberRepository;
 
     private ChoreService choreService;
@@ -65,6 +68,7 @@ class ChoreServiceTest {
         choreService = new ChoreService(
                 choreTemplateRepository,
                 chorePeriodCompletionRepository,
+                chorePeriodCompletionWriter,
                 familyMemberRepository,
                 clock
         );
@@ -289,8 +293,17 @@ class ChoreServiceTest {
                 LocalDate.of(2026, 5, 17),
                 LocalDate.of(2026, 5, 17)
         )).thenReturn(Optional.empty());
-        when(chorePeriodCompletionRepository.saveAndFlush(any(ChorePeriodCompletion.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        ChorePeriodCompletion savedCompletion = new ChorePeriodCompletion();
+        savedCompletion.setChoreTemplate(daily);
+        savedCompletion.setPeriodStartDate(LocalDate.of(2026, 5, 17));
+        savedCompletion.setPeriodEndDate(LocalDate.of(2026, 5, 17));
+        savedCompletion.setCompletedAt(LocalDateTime.of(2026, 5, 17, 16, 0));
+        when(chorePeriodCompletionWriter.createCompletion(
+                daily.getId(),
+                LocalDate.of(2026, 5, 17),
+                LocalDate.of(2026, 5, 17),
+                LocalDateTime.of(2026, 5, 17, 16, 0)
+        )).thenReturn(savedCompletion);
 
         ChoreCurrentPeriodStateResponse response = choreService.completeCurrentPeriod(
                 daily.getId(),
@@ -365,7 +378,12 @@ class ChoreServiceTest {
                 LocalDate.of(2026, 5, 17),
                 LocalDate.of(2026, 5, 17)
         )).thenReturn(Optional.empty(), Optional.of(existingCompletion));
-        when(chorePeriodCompletionRepository.saveAndFlush(any(ChorePeriodCompletion.class)))
+        when(chorePeriodCompletionWriter.createCompletion(
+                daily.getId(),
+                LocalDate.of(2026, 5, 17),
+                LocalDate.of(2026, 5, 17),
+                LocalDateTime.of(2026, 5, 17, 16, 0)
+        ))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
 
         ChoreCurrentPeriodStateResponse response = choreService.completeCurrentPeriod(
