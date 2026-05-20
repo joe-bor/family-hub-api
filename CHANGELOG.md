@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/joe-bor/family-hub-api/compare/v1.3.0...v1.4.0) (2026-05-20)
+
+
+### Features
+
+* **chores:** add family timezone groundwork ([2afb705](https://github.com/joe-bor/family-hub-api/commit/2afb705b449462c9136b13ac9ad9815e66c976c4))
+* **chores:** ship recurring chores board contract ([401bdfb](https://github.com/joe-bor/family-hub-api/commit/401bdfbb27db003f33f243077a9ca56d033a82c9))
+
+
+### Bug Fixes
+
+* harden chore completion idempotency ([fa5028e](https://github.com/joe-bor/family-hub-api/commit/fa5028e101eb78d1c64c0b235fe41410eec784b4))
+
 ## [1.3.0](https://github.com/joe-bor/family-hub-api/compare/v1.2.0...v1.3.0) (2026-05-07)
 
 
