@@ -1,7 +1,12 @@
 package com.familyhub.demo.integration;
 
 import com.familyhub.demo.config.TestcontainersConfig;
+import com.familyhub.demo.model.ChorePeriodCompletion;
+import com.familyhub.demo.model.ChoreTemplate;
+import com.familyhub.demo.model.Family;
+import com.familyhub.demo.repository.ChorePeriodCompletionRepository;
 import com.familyhub.demo.security.WithMockFamily;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,18 +18,37 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.familyhub.demo.TestDataFactory.FAMILY_ID;
 import static com.familyhub.demo.TestDataFactory.MEMBER_ID;
 import static com.familyhub.demo.TestDataFactory.OTHER_FAMILY_ID;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -45,6 +69,12 @@ class ChoreIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private EntityManager entityManager;
+
+    @MockitoSpyBean
+    private ChorePeriodCompletionRepository chorePeriodCompletionRepository;
 
     @BeforeEach
     void setUp() {
@@ -318,6 +348,75 @@ class ChoreIntegrationTest {
 
     @Test
     @WithMockFamily
+    void concurrentCompletionPut_whenBothRequestsSeeNoExistingRow_isIdempotent() throws Exception {
+        String templateId = createDailyTemplate();
+        LocalDate periodStart = LocalDate.of(2026, 5, 19);
+        CyclicBarrier bothRequestsSawMissingCompletion = new CyclicBarrier(2);
+        AtomicInteger gatedEmptyLookups = new AtomicInteger();
+
+        doAnswer(invocation -> {
+            ChoreTemplate template = invocation.getArgument(0);
+            Optional<ChorePeriodCompletion> result = entityManager.createQuery("""
+                            select c
+                            from ChorePeriodCompletion c
+                            where c.choreTemplate = :template
+                              and c.periodStartDate = :periodStart
+                              and c.periodEndDate = :periodEnd
+                            """, ChorePeriodCompletion.class)
+                    .setParameter("template", template)
+                    .setParameter("periodStart", periodStart)
+                    .setParameter("periodEnd", periodStart)
+                    .setMaxResults(1)
+                    .getResultList()
+                    .stream()
+                    .findFirst();
+
+            if (result.isEmpty() && gatedEmptyLookups.getAndIncrement() < 2) {
+                bothRequestsSawMissingCompletion.await(5, TimeUnit.SECONDS);
+            }
+
+            return result;
+        }).when(chorePeriodCompletionRepository).findByChoreTemplateAndPeriodStartDateAndPeriodEndDate(
+                any(ChoreTemplate.class),
+                eq(periodStart),
+                eq(periodStart)
+        );
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch startTogether = new CountDownLatch(1);
+        try {
+            List<Future<Integer>> responses = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                responses.add(executor.submit(() -> {
+                    startTogether.await(5, TimeUnit.SECONDS);
+                    return mockMvc.perform(put("/api/chores/templates/{id}/current-period-completion", templateId)
+                                    .with(testFamilyAuthentication())
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content("""
+                                            {"scope": "TODAY", "periodStartDate": "2026-05-19"}
+                                            """))
+                            .andReturn()
+                            .getResponse()
+                            .getStatus();
+                }));
+            }
+
+            startTogether.countDown();
+
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> response : responses) {
+                statuses.add(response.get(10, TimeUnit.SECONDS));
+            }
+
+            assertThat(statuses).containsOnly(200);
+            assertThat(chorePeriodCompletionCount()).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    @WithMockFamily
     void createTemplate_assigneeFromDifferentFamily_returns403ThroughRealStack() throws Exception {
         insertOtherFamilyAndMember();
 
@@ -395,6 +494,20 @@ class ChoreIntegrationTest {
     private int chorePeriodCompletionCount() {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM chore_period_completion", Integer.class);
         return count == null ? 0 : count;
+    }
+
+    private RequestPostProcessor testFamilyAuthentication() {
+        Family family = new Family();
+        family.setId(FAMILY_ID);
+        family.setUsername("testfamily");
+        family.setName("Test Family");
+        family.setPasswordHash("$2a$10$dummyhashfortesting");
+
+        return authentication(new UsernamePasswordAuthenticationToken(
+                family,
+                null,
+                Collections.emptyList()
+        ));
     }
 
     @TestConfiguration

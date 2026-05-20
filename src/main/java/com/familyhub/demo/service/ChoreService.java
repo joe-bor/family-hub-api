@@ -50,6 +50,7 @@ public class ChoreService {
 
     private final ChoreTemplateRepository choreTemplateRepository;
     private final ChorePeriodCompletionRepository chorePeriodCompletionRepository;
+    private final ChorePeriodCompletionWriter chorePeriodCompletionWriter;
     private final FamilyMemberRepository familyMemberRepository;
     private final Clock clock;
 
@@ -150,14 +151,13 @@ public class ChoreService {
             return toCurrentPeriodStateResponse(template, period, existingCompletion);
         }
 
-        ChorePeriodCompletion completion = new ChorePeriodCompletion();
-        completion.setChoreTemplate(template);
-        completion.setPeriodStartDate(period.periodStartDate());
-        completion.setPeriodEndDate(period.periodEndDate());
-        completion.setCompletedAt(LocalDateTime.now(clock));
-
         try {
-            ChorePeriodCompletion saved = chorePeriodCompletionRepository.saveAndFlush(completion);
+            ChorePeriodCompletion saved = chorePeriodCompletionWriter.createCompletion(
+                    template.getId(),
+                    period.periodStartDate(),
+                    period.periodEndDate(),
+                    LocalDateTime.now(clock)
+            );
             return toCurrentPeriodStateResponse(template, period, saved);
         } catch (DataIntegrityViolationException ex) {
             ChorePeriodCompletion concurrentCompletion = chorePeriodCompletionRepository
