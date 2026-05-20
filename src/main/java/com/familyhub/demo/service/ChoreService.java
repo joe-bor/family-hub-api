@@ -22,6 +22,7 @@ import com.familyhub.demo.repository.ChorePeriodCompletionRepository;
 import com.familyhub.demo.repository.ChoreTemplateRepository;
 import com.familyhub.demo.repository.FamilyMemberRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +45,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ChoreService {
-    private static final String DEFAULT_FAMILY_TIMEZONE = "America/Los_Angeles";
+    private static final String INACTIVE_TEMPLATE_MESSAGE = "Chore template is not active for the current period.";
     private static final String STALE_PERIOD_MESSAGE = "Chore period is stale. Refresh and try again.";
 
     private final ChoreTemplateRepository choreTemplateRepository;
@@ -60,6 +61,7 @@ public class ChoreService {
                 activeTemplates,
                 ChoreScope.TODAY,
                 today,
+                today,
                 today
         );
 
@@ -67,6 +69,7 @@ public class ChoreService {
         ChoreScopeBoardResponse weekBoard = buildScopeBoard(
                 activeTemplates,
                 ChoreScope.THIS_WEEK,
+                today,
                 weekStart,
                 weekStart.plusDays(6)
         );
@@ -75,6 +78,7 @@ public class ChoreService {
         ChoreScopeBoardResponse monthBoard = buildScopeBoard(
                 activeTemplates,
                 ChoreScope.THIS_MONTH,
+                today,
                 monthStart,
                 today.withDayOfMonth(today.lengthOfMonth())
         );
@@ -129,32 +133,42 @@ public class ChoreService {
             UpdateCurrentPeriodCompletionRequest request,
             Family family
     ) {
-        ChoreTemplate template = requireTemplate(family, templateId);
-        ResolvedPeriod period = resolveCurrentPeriod(template, family);
+        LocalDate today = familyLocalToday(family);
+        ChoreTemplate template = requireActiveTemplate(family, templateId, today);
+        ResolvedPeriod period = resolveCurrentPeriod(template, today);
         assertFreshPeriod(request, period);
 
-        ChorePeriodCompletion completion = chorePeriodCompletionRepository
+        ChorePeriodCompletion existingCompletion = chorePeriodCompletionRepository
                 .findByChoreTemplateAndPeriodStartDateAndPeriodEndDate(
                         template,
                         period.periodStartDate(),
                         period.periodEndDate()
                 )
-                .orElseGet(() -> {
-                    ChorePeriodCompletion created = new ChorePeriodCompletion();
-                    created.setChoreTemplate(template);
-                    created.setPeriodStartDate(period.periodStartDate());
-                    created.setPeriodEndDate(period.periodEndDate());
-                    created.setCompletedAt(LocalDateTime.now(clock));
-                    return created;
-                });
+                .orElse(null);
 
-        ChorePeriodCompletion saved = chorePeriodCompletionRepository.save(completion);
-        return new ChoreCurrentPeriodStateResponse(
-                period.scope(),
-                period.periodStartDate(),
-                period.periodEndDate(),
-                toBoardItem(template, saved)
-        );
+        if (existingCompletion != null) {
+            return toCurrentPeriodStateResponse(template, period, existingCompletion);
+        }
+
+        ChorePeriodCompletion completion = new ChorePeriodCompletion();
+        completion.setChoreTemplate(template);
+        completion.setPeriodStartDate(period.periodStartDate());
+        completion.setPeriodEndDate(period.periodEndDate());
+        completion.setCompletedAt(LocalDateTime.now(clock));
+
+        try {
+            ChorePeriodCompletion saved = chorePeriodCompletionRepository.saveAndFlush(completion);
+            return toCurrentPeriodStateResponse(template, period, saved);
+        } catch (DataIntegrityViolationException ex) {
+            ChorePeriodCompletion concurrentCompletion = chorePeriodCompletionRepository
+                    .findByChoreTemplateAndPeriodStartDateAndPeriodEndDate(
+                            template,
+                            period.periodStartDate(),
+                            period.periodEndDate()
+                    )
+                    .orElseThrow(() -> ex);
+            return toCurrentPeriodStateResponse(template, period, concurrentCompletion);
+        }
     }
 
     @Transactional
@@ -163,8 +177,9 @@ public class ChoreService {
             UpdateCurrentPeriodCompletionRequest request,
             Family family
     ) {
-        ChoreTemplate template = requireTemplate(family, templateId);
-        ResolvedPeriod period = resolveCurrentPeriod(template, family);
+        LocalDate today = familyLocalToday(family);
+        ChoreTemplate template = requireActiveTemplate(family, templateId, today);
+        ResolvedPeriod period = resolveCurrentPeriod(template, today);
         assertFreshPeriod(request, period);
 
         chorePeriodCompletionRepository
@@ -186,12 +201,13 @@ public class ChoreService {
     private ChoreScopeBoardResponse buildScopeBoard(
             List<ChoreTemplate> activeTemplates,
             ChoreScope scope,
+            LocalDate today,
             LocalDate periodStart,
             LocalDate periodEnd
     ) {
         List<ChoreTemplate> scopeTemplates = activeTemplates.stream()
                 .filter(template -> scopeFor(template.getCadence()) == scope)
-                .filter(template -> !template.getActiveFrom().isAfter(periodEnd))
+                .filter(template -> !template.getActiveFrom().isAfter(today))
                 .toList();
 
         Map<UUID, ChorePeriodCompletion> completionsByTemplateId = completionsByTemplateId(
@@ -295,9 +311,15 @@ public class ChoreService {
         };
     }
 
-    private ChoreTemplate requireTemplate(Family family, UUID templateId) {
-        return choreTemplateRepository.findByFamilyAndId(family, templateId)
+    private ChoreTemplate requireActiveTemplate(Family family, UUID templateId, LocalDate today) {
+        ChoreTemplate template = choreTemplateRepository.findByFamilyAndId(family, templateId)
                 .orElseThrow(() -> new ResourceNotFoundException("Chore Template", templateId));
+
+        if (template.getArchivedAt() != null || template.getActiveFrom().isAfter(today)) {
+            throw new BadRequestException(INACTIVE_TEMPLATE_MESSAGE);
+        }
+
+        return template;
     }
 
     private FamilyMember requireAssignedMember(Family family, UUID memberId) {
@@ -311,8 +333,7 @@ public class ChoreService {
         return member;
     }
 
-    private ResolvedPeriod resolveCurrentPeriod(ChoreTemplate template, Family family) {
-        LocalDate today = familyLocalToday(family);
+    private ResolvedPeriod resolveCurrentPeriod(ChoreTemplate template, LocalDate today) {
         return switch (template.getCadence()) {
             case DAILY -> new ResolvedPeriod(ChoreScope.TODAY, today, today);
             case WEEKLY -> {
@@ -337,8 +358,20 @@ public class ChoreService {
     }
 
     private String resolveTimezone(Family family) {
-        String timezone = family.getTimezone();
-        return timezone == null || timezone.isBlank() ? DEFAULT_FAMILY_TIMEZONE : timezone;
+        return FamilyTimezoneResolver.resolveStoredTimezoneOrDefault(family.getTimezone());
+    }
+
+    private ChoreCurrentPeriodStateResponse toCurrentPeriodStateResponse(
+            ChoreTemplate template,
+            ResolvedPeriod period,
+            ChorePeriodCompletion completion
+    ) {
+        return new ChoreCurrentPeriodStateResponse(
+                period.scope(),
+                period.periodStartDate(),
+                period.periodEndDate(),
+                toBoardItem(template, completion)
+        );
     }
 
     private ChoreBoardItemResponse toBoardItem(ChoreTemplate template, ChorePeriodCompletion completion) {

@@ -159,6 +159,53 @@ class ChoreIntegrationTest {
 
     @Test
     @WithMockFamily
+    void activeFrom_laterWithinCurrentWeekAndMonth_staysHiddenUntilActivationDate() throws Exception {
+        mockMvc.perform(post("/api/chores/templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Take out trash",
+                                  "assignedToMemberId": "00000000-0000-0000-0000-000000000002",
+                                  "cadence": "WEEKLY",
+                                  "activeFrom": "2026-05-21"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/chores/templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Deep clean fridge",
+                                  "assignedToMemberId": "00000000-0000-0000-0000-000000000002",
+                                  "cadence": "MONTHLY",
+                                  "activeFrom": "2026-05-25"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/chores/board"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.thisWeek.summary.total").value(0))
+                .andExpect(jsonPath("$.data.thisMonth.summary.total").value(0));
+    }
+
+    @Test
+    @WithMockFamily
+    void board_withPersistedInvalidTimezone_fallsBackToDefaultInsteadOf500() throws Exception {
+        jdbcTemplate.update(
+                "UPDATE family SET timezone = ? WHERE id = ?",
+                "Mars/Olympus",
+                FAMILY_ID
+        );
+
+        mockMvc.perform(get("/api/chores/board"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.timezone").value("America/Los_Angeles"));
+    }
+
+    @Test
+    @WithMockFamily
     void completionAndUncompletion_stalePeriod_returns400() throws Exception {
         String templateId = createDailyTemplate();
 
@@ -177,6 +224,96 @@ class ChoreIntegrationTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Chore period is stale. Refresh and try again."));
+    }
+
+    @Test
+    @WithMockFamily
+    void completionAndUncompletion_inactiveTemplate_return400() throws Exception {
+        String location = mockMvc.perform(post("/api/chores/templates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Take out trash",
+                                  "assignedToMemberId": "00000000-0000-0000-0000-000000000002",
+                                  "cadence": "WEEKLY",
+                                  "activeFrom": "2026-05-21"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getHeader("Location");
+
+        String templateId = location.substring(location.lastIndexOf('/') + 1);
+
+        mockMvc.perform(put("/api/chores/templates/{id}/current-period-completion", templateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scope": "THIS_WEEK", "periodStartDate": "2026-05-17"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Chore template is not active for the current period."));
+
+        mockMvc.perform(delete("/api/chores/templates/{id}/current-period-completion", templateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scope": "THIS_WEEK", "periodStartDate": "2026-05-17"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Chore template is not active for the current period."));
+    }
+
+    @Test
+    @WithMockFamily
+    void completionAndUncompletion_archivedTemplate_return400() throws Exception {
+        String templateId = createDailyTemplate();
+
+        mockMvc.perform(patch("/api/chores/templates/{id}", templateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"archived": true}
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/chores/templates/{id}/current-period-completion", templateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scope": "TODAY", "periodStartDate": "2026-05-19"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Chore template is not active for the current period."));
+
+        mockMvc.perform(delete("/api/chores/templates/{id}/current-period-completion", templateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scope": "TODAY", "periodStartDate": "2026-05-19"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Chore template is not active for the current period."));
+    }
+
+    @Test
+    @WithMockFamily
+    void duplicateCompletionPut_isIdempotentAndKeepsSingleCompletionRow() throws Exception {
+        String templateId = createDailyTemplate();
+
+        mockMvc.perform(put("/api/chores/templates/{id}/current-period-completion", templateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scope": "TODAY", "periodStartDate": "2026-05-19"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.item.completed").value(true));
+
+        mockMvc.perform(put("/api/chores/templates/{id}/current-period-completion", templateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"scope": "TODAY", "periodStartDate": "2026-05-19"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.item.completed").value(true));
+
+        assertThat(chorePeriodCompletionCount()).isEqualTo(1);
     }
 
     @Test
@@ -252,6 +389,11 @@ class ChoreIntegrationTest {
 
     private int choreTemplateCount() {
         Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM chore_template", Integer.class);
+        return count == null ? 0 : count;
+    }
+
+    private int chorePeriodCompletionCount() {
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM chore_period_completion", Integer.class);
         return count == null ? 0 : count;
     }
 

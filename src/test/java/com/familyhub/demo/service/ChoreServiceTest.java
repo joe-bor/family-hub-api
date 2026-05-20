@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -39,6 +40,7 @@ import static com.familyhub.demo.TestDataFactory.createFamilyMember;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -126,6 +128,43 @@ class ChoreServiceTest {
         ChoreBoardResponse board = choreService.getBoard(family);
 
         assertThat(board.thisMonth().summary().total()).isZero();
+    }
+
+    @Test
+    void getBoard_withInvalidStoredTimezone_fallsBackToPacificDefault() {
+        family.setTimezone("Mars/Olympus");
+        when(choreTemplateRepository.findActiveByFamily(family)).thenReturn(List.of());
+
+        ChoreBoardResponse board = choreService.getBoard(family);
+
+        assertThat(board.timezone()).isEqualTo("America/Los_Angeles");
+    }
+
+    @Test
+    void getBoard_excludesWeeklyAndMonthlyTemplatesUntilTheirActiveFromDateWithinCurrentPeriod() {
+        ChoreTemplate weeklyLaterThisWeek = createChoreTemplate(
+                family,
+                member,
+                "Take out trash",
+                ChoreCadence.WEEKLY,
+                LocalDate.of(2026, 5, 20)
+        );
+        ChoreTemplate monthlyLaterThisMonth = createChoreTemplate(
+                family,
+                member,
+                "Deep clean fridge",
+                ChoreCadence.MONTHLY,
+                LocalDate.of(2026, 5, 25)
+        );
+
+        when(choreTemplateRepository.findActiveByFamily(family))
+                .thenReturn(List.of(weeklyLaterThisWeek, monthlyLaterThisMonth));
+
+        ChoreBoardResponse board = choreService.getBoard(family);
+
+        assertThat(board.thisWeek().summary().total()).isZero();
+        assertThat(board.thisMonth().summary().total()).isZero();
+        verifyNoInteractions(chorePeriodCompletionRepository);
     }
 
     @Test
@@ -250,7 +289,8 @@ class ChoreServiceTest {
                 LocalDate.of(2026, 5, 17),
                 LocalDate.of(2026, 5, 17)
         )).thenReturn(Optional.empty());
-        when(chorePeriodCompletionRepository.save(any(ChorePeriodCompletion.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(chorePeriodCompletionRepository.saveAndFlush(any(ChorePeriodCompletion.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         ChoreCurrentPeriodStateResponse response = choreService.completeCurrentPeriod(
                 daily.getId(),
@@ -260,6 +300,82 @@ class ChoreServiceTest {
 
         assertThat(response.item().completed()).isTrue();
         assertThat(response.item().completedAt()).isEqualTo(LocalDateTime.of(2026, 5, 17, 16, 0));
+    }
+
+    @Test
+    void completeCurrentPeriod_whenTemplateArchived_throwsBadRequest() {
+        ChoreTemplate archived = createChoreTemplate(
+                family,
+                member,
+                "Brush teeth",
+                ChoreCadence.DAILY,
+                LocalDate.of(2026, 5, 17)
+        );
+        archived.setArchivedAt(LocalDateTime.of(2026, 5, 17, 15, 0));
+        when(choreTemplateRepository.findByFamilyAndId(family, archived.getId())).thenReturn(Optional.of(archived));
+
+        assertThatThrownBy(() -> choreService.completeCurrentPeriod(
+                archived.getId(),
+                new UpdateCurrentPeriodCompletionRequest(ChoreScope.TODAY, LocalDate.of(2026, 5, 17)),
+                family
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Chore template is not active for the current period.");
+    }
+
+    @Test
+    void completeCurrentPeriod_whenTemplateNotYetActive_throwsBadRequest() {
+        ChoreTemplate futureWeekly = createChoreTemplate(
+                family,
+                member,
+                "Take out trash",
+                ChoreCadence.WEEKLY,
+                LocalDate.of(2026, 5, 20)
+        );
+        when(choreTemplateRepository.findByFamilyAndId(family, futureWeekly.getId()))
+                .thenReturn(Optional.of(futureWeekly));
+
+        assertThatThrownBy(() -> choreService.completeCurrentPeriod(
+                futureWeekly.getId(),
+                new UpdateCurrentPeriodCompletionRequest(ChoreScope.THIS_WEEK, LocalDate.of(2026, 5, 17)),
+                family
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Chore template is not active for the current period.");
+    }
+
+    @Test
+    void completeCurrentPeriod_duplicateInsertRace_returnsExistingCompletion() {
+        ChoreTemplate daily = createChoreTemplate(
+                family,
+                member,
+                "Brush teeth",
+                ChoreCadence.DAILY,
+                LocalDate.of(2026, 5, 17)
+        );
+        ChorePeriodCompletion existingCompletion = new ChorePeriodCompletion();
+        existingCompletion.setChoreTemplate(daily);
+        existingCompletion.setPeriodStartDate(LocalDate.of(2026, 5, 17));
+        existingCompletion.setPeriodEndDate(LocalDate.of(2026, 5, 17));
+        existingCompletion.setCompletedAt(LocalDateTime.of(2026, 5, 17, 15, 59));
+
+        when(choreTemplateRepository.findByFamilyAndId(family, daily.getId())).thenReturn(Optional.of(daily));
+        when(chorePeriodCompletionRepository.findByChoreTemplateAndPeriodStartDateAndPeriodEndDate(
+                daily,
+                LocalDate.of(2026, 5, 17),
+                LocalDate.of(2026, 5, 17)
+        )).thenReturn(Optional.empty(), Optional.of(existingCompletion));
+        when(chorePeriodCompletionRepository.saveAndFlush(any(ChorePeriodCompletion.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        ChoreCurrentPeriodStateResponse response = choreService.completeCurrentPeriod(
+                daily.getId(),
+                new UpdateCurrentPeriodCompletionRequest(ChoreScope.TODAY, LocalDate.of(2026, 5, 17)),
+                family
+        );
+
+        assertThat(response.item().completed()).isTrue();
+        assertThat(response.item().completedAt()).isEqualTo(LocalDateTime.of(2026, 5, 17, 15, 59));
     }
 
     @Test
@@ -290,6 +406,27 @@ class ChoreServiceTest {
         );
 
         assertThat(response.item().completed()).isFalse();
+    }
+
+    @Test
+    void uncompleteCurrentPeriod_whenTemplateArchived_throwsBadRequest() {
+        ChoreTemplate archived = createChoreTemplate(
+                family,
+                member,
+                "Brush teeth",
+                ChoreCadence.DAILY,
+                LocalDate.of(2026, 5, 17)
+        );
+        archived.setArchivedAt(LocalDateTime.of(2026, 5, 17, 15, 0));
+        when(choreTemplateRepository.findByFamilyAndId(family, archived.getId())).thenReturn(Optional.of(archived));
+
+        assertThatThrownBy(() -> choreService.uncompleteCurrentPeriod(
+                archived.getId(),
+                new UpdateCurrentPeriodCompletionRequest(ChoreScope.TODAY, LocalDate.of(2026, 5, 17)),
+                family
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Chore template is not active for the current period.");
     }
 
     @Test
