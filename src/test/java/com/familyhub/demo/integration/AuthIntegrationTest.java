@@ -97,6 +97,27 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void register_invalidTimezone_returns400() throws Exception {
+        String payload = """
+                {
+                    "username": "%s",
+                    "password": "password123",
+                    "familyName": "Integration Family",
+                    "members": [
+                        { "name": "Mom", "color": "coral", "email": "mom@test.com" }
+                    ],
+                    "timezone": "Mars/Olympus"
+                }
+                """.formatted(uniqueUsername());
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Timezone must be a valid IANA timezone."));
+    }
+
+    @Test
     void protectedEndpoint_noToken_returns401() throws Exception {
         mockMvc.perform(get("/api/family"))
                 .andExpect(status().isUnauthorized())

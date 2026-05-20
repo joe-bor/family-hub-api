@@ -20,8 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-    private static final String DEFAULT_FAMILY_TIMEZONE = "America/Los_Angeles";
-
     private final FamilyRepository familyRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -39,7 +37,7 @@ public class AuthService {
         family.setName(registerRequest.familyName());
         family.setUsername(registerRequest.username());
         family.setPasswordHash(passwordEncoder.encode(registerRequest.password()));
-        family.setTimezone(resolveTimezone(registerRequest.timezone()));
+        family.setTimezone(FamilyTimezoneResolver.normalizeRegistrationTimezone(registerRequest.timezone()));
         family.setFamilyMembers(
                 registerRequest.members().stream()
                         .map(request -> FamilyMemberMapper.toEntity(request, family))
@@ -53,12 +51,6 @@ public class AuthService {
         String token = jwtService.generateToken(saved);
 
         return new AuthResponse(token, FamilyMapper.toDto(saved));
-    }
-
-    private String resolveTimezone(String timezone) {
-        return timezone == null || timezone.isBlank()
-                ? DEFAULT_FAMILY_TIMEZONE
-                : timezone.trim();
     }
 
     @Transactional

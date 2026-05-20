@@ -4,6 +4,7 @@ import com.familyhub.demo.dto.AuthResponse;
 import com.familyhub.demo.dto.LoginRequest;
 import com.familyhub.demo.dto.RegisterRequest;
 import com.familyhub.demo.dto.UsernameCheckResponse;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.InvalidCredentialException;
 import com.familyhub.demo.exception.UsernameAlreadyExists;
 import com.familyhub.demo.model.Family;
@@ -121,6 +122,22 @@ class AuthServiceTest {
         verify(familyRepository).saveAndFlush(argThat(saved ->
                 "America/Los_Angeles".equals(saved.getTimezone())
         ));
+    }
+
+    @Test
+    void register_withInvalidTimezone_throwsBadRequest() {
+        RegisterRequest request = new RegisterRequest(
+                "smithfamily",
+                "password123",
+                "Smith Family",
+                List.of(createFamilyMemberRequest()),
+                "Mars/Olympus"
+        );
+        when(familyRepository.existsByUsername(request.username())).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.register(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Timezone must be a valid IANA timezone.");
     }
 
     @Test
