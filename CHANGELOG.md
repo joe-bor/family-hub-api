@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/joe-bor/family-hub-api/compare/v1.4.0...v1.4.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* **datasource:** drain idle Hikari pool so Neon can autosuspend ([d4c56ac](https://github.com/joe-bor/family-hub-api/commit/d4c56ac8d55f6be8d2eee566ca152b314c2d56b8))
+
 ## [1.4.0](https://github.com/joe-bor/family-hub-api/compare/v1.3.0...v1.4.0) (2026-05-20)
 
 
