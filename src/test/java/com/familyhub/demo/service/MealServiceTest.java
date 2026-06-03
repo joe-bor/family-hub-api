@@ -28,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -437,6 +438,34 @@ class MealServiceTest {
                 MealType.DINNER,
                 MealCollisionMode.REPLACE_PRIMARY
         ), otherFamily)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void upsertSlot_ignoresNullExtraEntries() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                2,
+                MealType.DINNER
+        )).thenReturn(Optional.empty());
+        when(mealSlotRepository.saveAndFlush(any(MealSlot.class))).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
+
+        List<MealEntryRequest> extrasWithNull = new ArrayList<>();
+        extrasWithNull.add(quickMeal("Salad"));
+        extrasWithNull.add(null);
+
+        MealSlotResponse response = mealService.upsertSlot(new UpsertMealSlotRequest(
+                WEEK_START,
+                2,
+                MealType.DINNER,
+                quickMeal("Leftovers"),
+                extrasWithNull,
+                null,
+                null
+        ), family);
+
+        assertThat(response.primary().title()).isEqualTo("Leftovers");
+        assertThat(response.extras()).extracting(MealSlotEntryResponse::title).containsExactly("Salad");
     }
 
     private MealEntryRequest quickMeal(String title) {
