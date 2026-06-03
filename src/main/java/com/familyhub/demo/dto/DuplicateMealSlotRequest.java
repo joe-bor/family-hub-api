@@ -10,10 +10,10 @@ import java.time.LocalDate;
 
 public record DuplicateMealSlotRequest(
         @NotNull LocalDate sourceWeekStartDate,
-        @Min(0) @Max(6) int sourceDayIndex,
+        @NotNull @Min(0) @Max(6) Integer sourceDayIndex,
         @NotNull MealType sourceMealType,
         @NotNull LocalDate destinationWeekStartDate,
-        @Min(0) @Max(6) int destinationDayIndex,
+        @NotNull @Min(0) @Max(6) Integer destinationDayIndex,
         @NotNull MealType destinationMealType,
         @NotNull MealCollisionMode collisionMode
 ) {

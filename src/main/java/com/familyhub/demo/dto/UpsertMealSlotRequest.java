@@ -12,7 +12,7 @@ import java.util.List;
 
 public record UpsertMealSlotRequest(
         @NotNull LocalDate weekStartDate,
-        @Min(0) @Max(6) int dayIndex,
+        @NotNull @Min(0) @Max(6) Integer dayIndex,
         @NotNull MealType mealType,
         @Valid @NotNull MealEntryRequest primary,
         List<@Valid MealEntryRequest> extras,
