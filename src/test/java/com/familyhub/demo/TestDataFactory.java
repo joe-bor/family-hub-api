@@ -10,6 +10,7 @@ import com.familyhub.demo.model.FamilyMember;
 import com.familyhub.demo.model.ListCategory;
 import com.familyhub.demo.model.ListCategoryDisplayMode;
 import com.familyhub.demo.model.ListKind;
+import com.familyhub.demo.model.Recipe;
 import com.familyhub.demo.model.SharedList;
 import com.familyhub.demo.model.SharedListItem;
 
@@ -29,6 +30,7 @@ public final class TestDataFactory {
     public static final UUID LIST_ID = UUID.fromString("00000000-0000-0000-0000-000000000005");
     public static final UUID LIST_ITEM_ID = UUID.fromString("00000000-0000-0000-0000-000000000006");
     public static final UUID LIST_CATEGORY_ID = UUID.fromString("00000000-0000-0000-0000-000000000007");
+    public static final UUID RECIPE_ID = UUID.fromString("00000000-0000-0000-0000-000000000008");
     public static final UUID OTHER_FAMILY_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
 
     private TestDataFactory() {
@@ -339,6 +341,20 @@ public final class TestDataFactory {
         return list;
     }
 
+    public static Recipe createRecipe(Family family, String title) {
+        Recipe recipe = new Recipe();
+        recipe.setId(RECIPE_ID);
+        recipe.setFamily(family);
+        recipe.setTitle(title);
+        recipe.setImageUrl(null);
+        recipe.setNote(null);
+        recipe.setSourceUrl(null);
+        recipe.setFavorite(false);
+        recipe.setCreatedAt(LocalDateTime.of(2026, 6, 2, 9, 0));
+        recipe.setUpdatedAt(LocalDateTime.of(2026, 6, 2, 9, 0));
+        return recipe;
+    }
+
     public static ListSummaryResponse sampleListSummaryResponse() {
         return new ListSummaryResponse(
                 LIST_ID,
@@ -382,6 +398,32 @@ public final class TestDataFactory {
                 List.of(sampleListItemResponse()),
                 LocalDateTime.of(2026, 5, 6, 9, 0),
                 LocalDateTime.of(2026, 5, 6, 9, 0)
+        );
+    }
+
+    public static RecipeSummaryResponse sampleRecipeSummaryResponse() {
+        return new RecipeSummaryResponse(
+                RECIPE_ID,
+                "Sheet Pan Gnocchi",
+                "https://cdn.example.com/gnocchi.jpg",
+                true,
+                List.of("dinner", "weeknight"),
+                LocalDateTime.of(2026, 6, 2, 9, 0)
+        );
+    }
+
+    public static RecipeDetailResponse sampleRecipeDetailResponse() {
+        return new RecipeDetailResponse(
+                RECIPE_ID,
+                "Sheet Pan Gnocchi",
+                "https://cdn.example.com/gnocchi.jpg",
+                List.of("1 lb shelf-stable gnocchi", "2 cups cherry tomatoes"),
+                List.of("Heat oven to 425F", "Roast for 20 minutes"),
+                "Weeknight favorite",
+                "https://example.com/gnocchi",
+                List.of("dinner", "weeknight"),
+                true,
+                LocalDateTime.of(2026, 6, 2, 9, 0)
         );
     }
 }
