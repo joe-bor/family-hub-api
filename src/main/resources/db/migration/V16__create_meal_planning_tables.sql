@@ -11,6 +11,8 @@ CREATE TABLE meal_slot (
         FOREIGN KEY (family_id) REFERENCES family(id) ON DELETE CASCADE,
     CONSTRAINT chk_meal_slot_day_index
         CHECK (day_index >= 0 AND day_index <= 6),
+    CONSTRAINT chk_meal_slot_meal_type
+        CHECK (meal_type IN ('BREAKFAST', 'LUNCH', 'DINNER')),
     CONSTRAINT uk_meal_slot_family_week_day_type
         UNIQUE (family_id, week_start_date, day_index, meal_type)
 );
@@ -31,6 +33,10 @@ CREATE TABLE meal_slot_entry (
         FOREIGN KEY (slot_id) REFERENCES meal_slot(id) ON DELETE CASCADE,
     CONSTRAINT fk_meal_slot_entry_recipe
         FOREIGN KEY (recipe_id) REFERENCES recipe(id) ON DELETE SET NULL,
+    CONSTRAINT chk_meal_slot_entry_role
+        CHECK (role IN ('PRIMARY', 'EXTRA')),
+    CONSTRAINT chk_meal_slot_entry_source_type
+        CHECK (source_type IN ('RECIPE', 'QUICK')),
     CONSTRAINT uk_meal_slot_entry_slot_sort
         UNIQUE (slot_id, sort_order)
 );
