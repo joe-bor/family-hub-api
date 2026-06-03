@@ -70,6 +70,28 @@ class RecipeRepositoryTest {
         assertThat(recipeRepository.findByIdAndFamily(otherFamilyRecipe.getId(), family)).isEmpty();
     }
 
+    @Test
+    void findByFamilyForSummary_keepsFamilyScopeAndTagOrder() {
+        Recipe familyRecipe = recipeFor(family, "Tag Soup");
+        familyRecipe.getTags().add(tag(familyRecipe, 0, "dinner"));
+        familyRecipe.getTags().add(tag(familyRecipe, 1, "quick"));
+        recipeRepository.saveAndFlush(familyRecipe);
+        recipeRepository.saveAndFlush(recipeFor(otherFamily, "Other Soup"));
+        entityManager.clear();
+
+        java.util.List<Recipe> recipes = recipeRepository.findByFamilyForSummary(family);
+
+        assertThat(recipes).extracting(Recipe::getTitle)
+                .contains("Tag Soup")
+                .doesNotContain("Other Soup");
+        Recipe saved = recipes.stream()
+                .filter(recipe -> recipe.getTitle().equals("Tag Soup"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(saved.getTags()).extracting(RecipeTag::getName)
+                .containsExactly("dinner", "quick");
+    }
+
     private Family persistFamily(String username) {
         Family savedFamily = new Family();
         savedFamily.setName("Family " + username);

@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -62,6 +63,17 @@ class RecipeIntegrationTest {
 
         String recipeId = JsonPath.read(createBody, "$.data.id");
 
+        mockMvc.perform(post("/api/recipes")
+                        .header("Authorization", "Bearer " + otherToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Other Soup"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.title").value("Other Soup"));
+
         mockMvc.perform(get("/api/recipes")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -69,8 +81,28 @@ class RecipeIntegrationTest {
                 .andExpect(jsonPath("$.data[0].title").value("Quick Oats"))
                 .andExpect(jsonPath("$.data[0].favorite").value(false));
 
+        String listBody = mockMvc.perform(get("/api/recipes")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(listBody).contains("Quick Oats");
+        assertThat(listBody).doesNotContain("Other Soup");
+
         mockMvc.perform(get("/api/recipes/{id}", recipeId)
                         .header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(patch("/api/recipes/{id}", recipeId)
+                        .header("Authorization", "Bearer " + otherToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "favorite": true
+                                }
+                                """))
                 .andExpect(status().isNotFound());
 
         mockMvc.perform(patch("/api/recipes/{id}", recipeId)

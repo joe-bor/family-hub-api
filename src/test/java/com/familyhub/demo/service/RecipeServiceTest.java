@@ -5,6 +5,7 @@ import com.familyhub.demo.dto.ImportRecipeRequest;
 import com.familyhub.demo.dto.RecipeDetailResponse;
 import com.familyhub.demo.dto.RecipeSummaryResponse;
 import com.familyhub.demo.dto.UpdateRecipeRequest;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.Recipe;
@@ -141,7 +142,7 @@ class RecipeServiceTest {
 
         RecipeDetailResponse response = recipeService.updateRecipe(
                 RECIPE_ID,
-                new UpdateRecipeRequest(
+                updateRequest(
                         "New Soup",
                         "https://cdn.example.com/soup.jpg",
                         List.of("1 cup broth", "1 cup noodles"),
@@ -174,13 +175,84 @@ class RecipeServiceTest {
 
         RecipeDetailResponse response = recipeService.updateRecipe(
                 RECIPE_ID,
-                new UpdateRecipeRequest(null, null, null, null, null, null, null, true),
+                favoriteOnlyRequest(true),
                 family
         );
 
         assertThat(response.title()).isEqualTo("Keep Soup");
         assertThat(response.ingredients()).containsExactly("1 cup broth");
         assertThat(response.favorite()).isTrue();
+    }
+
+    @Test
+    void updateRecipe_canClearNullableFieldsWithExplicitNullSetters() {
+        Recipe recipe = createRecipe(family, "Keep Soup");
+        recipe.setImageUrl("https://cdn.example.com/soup.jpg");
+        recipe.setNote("Old note");
+        recipe.setSourceUrl("https://example.com/soup");
+        when(recipeRepository.findByIdAndFamily(RECIPE_ID, family)).thenReturn(Optional.of(recipe));
+        when(recipeRepository.saveAndFlush(recipe)).thenAnswer(invocation -> savedRecipe(invocation.getArgument(0)));
+
+        UpdateRecipeRequest request = new UpdateRecipeRequest();
+        request.setImageUrl(null);
+        request.setNote(null);
+        request.setSourceUrl(null);
+
+        RecipeDetailResponse response = recipeService.updateRecipe(RECIPE_ID, request, family);
+
+        assertThat(response.imageUrl()).isNull();
+        assertThat(response.note()).isNull();
+        assertThat(response.sourceUrl()).isNull();
+    }
+
+    @Test
+    void createRecipe_rejectsFieldsThatWouldViolateRecipeConstraints() {
+        CreateRecipeRequest request = new CreateRecipeRequest(
+                "Sheet Pan Gnocchi",
+                "not a url",
+                List.of("x".repeat(501)),
+                List.of("Heat oven"),
+                null,
+                "https://example.com/gnocchi",
+                List.of("dinner"),
+                false
+        );
+
+        assertThatThrownBy(() -> recipeService.createRecipe(request, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Recipe image URL must be a valid http or https URL");
+    }
+
+    @Test
+    void updateRecipe_rejectsTagsThatWouldViolateRecipeConstraints() {
+        Recipe recipe = createRecipe(family, "Keep Soup");
+        when(recipeRepository.findByIdAndFamily(RECIPE_ID, family)).thenReturn(Optional.of(recipe));
+
+        UpdateRecipeRequest request = new UpdateRecipeRequest();
+        request.setTags(List.of("x".repeat(61)));
+
+        assertThatThrownBy(() -> recipeService.updateRecipe(RECIPE_ID, request, family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Recipe tag must be 60 characters or less");
+    }
+
+    @Test
+    void importRecipe_failsClosedWhenImportedRecipeWouldViolateConstraints() {
+        when(recipeImportService.importFromUrl("https://example.com/tacos"))
+                .thenReturn(new ImportedRecipe(
+                        "x".repeat(161),
+                        null,
+                        List.of("1 lb beef"),
+                        List.of("Brown beef"),
+                        null,
+                        "https://example.com/tacos",
+                        List.of(),
+                        false
+                ));
+
+        assertThatThrownBy(() -> recipeService.importRecipe(new ImportRecipeRequest("https://example.com/tacos"), family))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Could not import recipe");
     }
 
     @Test
@@ -225,5 +297,33 @@ class RecipeServiceTest {
         ingredient.setSortOrder(sortOrder);
         ingredient.setText(text);
         recipe.getIngredients().add(ingredient);
+    }
+
+    private UpdateRecipeRequest favoriteOnlyRequest(boolean favorite) {
+        UpdateRecipeRequest request = new UpdateRecipeRequest();
+        request.setFavorite(favorite);
+        return request;
+    }
+
+    private UpdateRecipeRequest updateRequest(
+            String title,
+            String imageUrl,
+            List<String> ingredients,
+            List<String> instructions,
+            String note,
+            String sourceUrl,
+            List<String> tags,
+            Boolean favorite
+    ) {
+        UpdateRecipeRequest request = new UpdateRecipeRequest();
+        request.setTitle(title);
+        request.setImageUrl(imageUrl);
+        request.setIngredients(ingredients);
+        request.setInstructions(instructions);
+        request.setNote(note);
+        request.setSourceUrl(sourceUrl);
+        request.setTags(tags);
+        request.setFavorite(favorite);
+        return request;
     }
 }

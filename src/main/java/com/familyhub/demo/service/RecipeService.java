@@ -18,8 +18,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,10 +43,10 @@ public class RecipeService {
     public RecipeDetailResponse createRecipe(CreateRecipeRequest request, Family family) {
         Recipe recipe = new Recipe();
         recipe.setFamily(family);
-        recipe.setTitle(requiredTitle(request.title()));
-        recipe.setImageUrl(optionalText(request.imageUrl()));
-        recipe.setNote(optionalText(request.note()));
-        recipe.setSourceUrl(optionalText(request.sourceUrl()));
+        recipe.setTitle(RecipeFieldValidator.requiredTitle(request.title()));
+        recipe.setImageUrl(RecipeFieldValidator.optionalHttpUrl(request.imageUrl(), "Recipe image URL"));
+        recipe.setNote(RecipeFieldValidator.optionalText(request.note()));
+        recipe.setSourceUrl(RecipeFieldValidator.optionalHttpUrl(request.sourceUrl(), "Recipe source URL"));
         recipe.setFavorite(Boolean.TRUE.equals(request.favorite()));
         replaceIngredients(recipe, request.ingredients());
         replaceInstructions(recipe, request.instructions());
@@ -61,10 +59,10 @@ public class RecipeService {
     public RecipeDetailResponse updateRecipe(UUID id, UpdateRecipeRequest request, Family family) {
         Recipe recipe = getRecipeOrThrow(id, family);
         if (request.hasTitle()) {
-            recipe.setTitle(requiredTitle(request.title()));
+            recipe.setTitle(RecipeFieldValidator.requiredTitle(request.title()));
         }
         if (request.hasImageUrl()) {
-            recipe.setImageUrl(optionalText(request.imageUrl()));
+            recipe.setImageUrl(RecipeFieldValidator.optionalHttpUrl(request.imageUrl(), "Recipe image URL"));
         }
         if (request.hasIngredients()) {
             replaceIngredients(recipe, request.ingredients());
@@ -73,10 +71,10 @@ public class RecipeService {
             replaceInstructions(recipe, request.instructions());
         }
         if (request.hasNote()) {
-            recipe.setNote(optionalText(request.note()));
+            recipe.setNote(RecipeFieldValidator.optionalText(request.note()));
         }
         if (request.hasSourceUrl()) {
-            recipe.setSourceUrl(optionalText(request.sourceUrl()));
+            recipe.setSourceUrl(RecipeFieldValidator.optionalHttpUrl(request.sourceUrl(), "Recipe source URL"));
         }
         if (request.hasTags()) {
             replaceTags(recipe, request.tags());
@@ -84,24 +82,27 @@ public class RecipeService {
         if (request.hasFavorite()) {
             recipe.setFavorite(Boolean.TRUE.equals(request.favorite()));
         }
-        recipe.setUpdatedAt(LocalDateTime.now());
 
         return RecipeMapper.toDetailDto(recipeRepository.saveAndFlush(recipe));
     }
 
     @Transactional
     public RecipeDetailResponse importRecipe(ImportRecipeRequest request, Family family) {
-        ImportedRecipe imported = recipeImportService.importFromUrl(request.url().trim());
         Recipe recipe = new Recipe();
-        recipe.setFamily(family);
-        recipe.setTitle(requiredTitle(imported.title()));
-        recipe.setImageUrl(optionalText(imported.imageUrl()));
-        recipe.setNote(optionalText(imported.note()));
-        recipe.setSourceUrl(optionalText(imported.sourceUrl()));
-        recipe.setFavorite(imported.favorite());
-        replaceIngredients(recipe, imported.ingredients());
-        replaceInstructions(recipe, imported.instructions());
-        replaceTags(recipe, imported.tags());
+        try {
+            ImportedRecipe imported = recipeImportService.importFromUrl(request.url().trim());
+            recipe.setFamily(family);
+            recipe.setTitle(RecipeFieldValidator.requiredTitle(imported.title()));
+            recipe.setImageUrl(RecipeFieldValidator.optionalHttpUrl(imported.imageUrl(), "Recipe image URL"));
+            recipe.setNote(RecipeFieldValidator.optionalText(imported.note()));
+            recipe.setSourceUrl(RecipeFieldValidator.optionalHttpUrl(imported.sourceUrl(), "Recipe source URL"));
+            recipe.setFavorite(imported.favorite());
+            replaceIngredients(recipe, imported.ingredients());
+            replaceInstructions(recipe, imported.instructions());
+            replaceTags(recipe, imported.tags());
+        } catch (BadRequestException ex) {
+            throw importFailure();
+        }
 
         return RecipeMapper.toDetailDto(recipeRepository.saveAndFlush(recipe));
     }
@@ -113,7 +114,7 @@ public class RecipeService {
 
     private void replaceIngredients(Recipe recipe, List<String> values) {
         recipe.getIngredients().clear();
-        List<String> normalized = normalizedList(values);
+        List<String> normalized = RecipeFieldValidator.normalizedIngredients(values);
         for (int i = 0; i < normalized.size(); i++) {
             RecipeIngredient ingredient = new RecipeIngredient();
             ingredient.setRecipe(recipe);
@@ -125,7 +126,7 @@ public class RecipeService {
 
     private void replaceInstructions(Recipe recipe, List<String> values) {
         recipe.getInstructions().clear();
-        List<String> normalized = normalizedList(values);
+        List<String> normalized = RecipeFieldValidator.normalizedInstructions(values);
         for (int i = 0; i < normalized.size(); i++) {
             RecipeInstruction instruction = new RecipeInstruction();
             instruction.setRecipe(recipe);
@@ -137,7 +138,7 @@ public class RecipeService {
 
     private void replaceTags(Recipe recipe, List<String> values) {
         recipe.getTags().clear();
-        List<String> normalized = new LinkedHashSet<>(normalizedList(values)).stream().toList();
+        List<String> normalized = RecipeFieldValidator.normalizedTags(values);
         for (int i = 0; i < normalized.size(); i++) {
             RecipeTag tag = new RecipeTag();
             tag.setRecipe(recipe);
@@ -147,28 +148,7 @@ public class RecipeService {
         }
     }
 
-    private List<String> normalizedList(List<String> values) {
-        if (values == null) {
-            return List.of();
-        }
-        return values.stream()
-                .map(this::optionalText)
-                .filter(value -> value != null)
-                .toList();
-    }
-
-    private String requiredTitle(String value) {
-        String normalized = optionalText(value);
-        if (normalized == null) {
-            throw new BadRequestException("Recipe title is required.");
-        }
-        return normalized;
-    }
-
-    private String optionalText(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
+    private static BadRequestException importFailure() {
+        return new BadRequestException("Could not import recipe.");
     }
 }

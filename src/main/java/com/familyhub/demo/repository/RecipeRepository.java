@@ -16,7 +16,7 @@ public interface RecipeRepository extends JpaRepository<Recipe, UUID> {
             select distinct r from Recipe r
             left join fetch r.tags t
             where r.family = :family
-            order by r.updatedAt desc, r.createdAt desc, t.sortOrder asc
+            order by r.updatedAt desc, r.createdAt desc
             """)
     List<Recipe> findByFamilyForSummary(@Param("family") Family family);
 
