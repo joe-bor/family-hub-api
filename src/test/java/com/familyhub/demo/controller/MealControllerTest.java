@@ -32,6 +32,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -211,6 +212,39 @@ class MealControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockFamily
+    void removeSlot_returns200() throws Exception {
+        given(mealService.removeSlot(any(), any(Family.class))).willReturn(sampleBoard());
+
+        mockMvc.perform(delete("/api/meals/slots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "dayIndex": 0,
+                                  "mealType": "dinner"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Meal slot removed successfully"));
+    }
+
+    @Test
+    @WithMockFamily
+    void removeSlot_missingDayIndexReturns400() throws Exception {
+        mockMvc.perform(delete("/api/meals/slots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "mealType": "dinner"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Bad Request"));
     }
 
     @Test

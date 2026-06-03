@@ -5,6 +5,7 @@ import com.familyhub.demo.dto.DuplicateMealSlotRequest;
 import com.familyhub.demo.dto.MealBoardResponse;
 import com.familyhub.demo.dto.MealSlotResponse;
 import com.familyhub.demo.dto.MoveMealSlotRequest;
+import com.familyhub.demo.dto.RemoveMealSlotRequest;
 import com.familyhub.demo.dto.UpsertMealSlotRequest;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.service.MealService;
@@ -12,6 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -66,6 +68,17 @@ public class MealController {
         return ResponseEntity.ok(new ApiResponse<>(
                 mealService.duplicateSlot(request, family),
                 "Meal slot duplicated successfully"
+        ));
+    }
+
+    @DeleteMapping("/slots")
+    public ResponseEntity<ApiResponse<MealBoardResponse>> removeSlot(
+            @Valid @RequestBody RemoveMealSlotRequest request,
+            @AuthenticationPrincipal Family family
+    ) {
+        return ResponseEntity.ok(new ApiResponse<>(
+                mealService.removeSlot(request, family),
+                "Meal slot removed successfully"
         ));
     }
 }

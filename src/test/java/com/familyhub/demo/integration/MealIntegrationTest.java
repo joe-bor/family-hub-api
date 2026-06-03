@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -288,6 +289,31 @@ class MealIntegrationTest {
                 .andExpect(jsonPath("$.data.days[5].slots[2].primary.title").value("Tacos"))
                 .andExpect(jsonPath("$.data.days[5].slots[2].extras[0].title").value("Leftovers"))
                 .andExpect(jsonPath("$.data.days[5].slots[2].extras[1].title").value("Salad"));
+
+        mockMvc.perform(delete("/api/meals/slots")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "dayIndex": 5,
+                                  "mealType": "dinner"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.days[5].slots[2].primary").doesNotExist());
+
+        mockMvc.perform(delete("/api/meals/slots")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "dayIndex": 5,
+                                  "mealType": "dinner"
+                                }
+                                """))
+                .andExpect(status().isNotFound());
 
         recipeRepository.deleteById(UUID.fromString(recipeId));
         recipeRepository.flush();

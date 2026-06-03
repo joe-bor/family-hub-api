@@ -5,6 +5,7 @@ import com.familyhub.demo.dto.MealEntryRequest;
 import com.familyhub.demo.dto.MealSlotEntryResponse;
 import com.familyhub.demo.dto.MealSlotResponse;
 import com.familyhub.demo.dto.MoveMealSlotRequest;
+import com.familyhub.demo.dto.RemoveMealSlotRequest;
 import com.familyhub.demo.dto.UpsertMealSlotRequest;
 import com.familyhub.demo.dto.DuplicateMealSlotRequest;
 import com.familyhub.demo.exception.BadRequestException;
@@ -438,6 +439,44 @@ class MealServiceTest {
                 MealType.DINNER,
                 MealCollisionMode.REPLACE_PRIMARY
         ), otherFamily)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void removeSlot_deletesSlotAndReturnsBoard() {
+        MealSlot slot = mealSlot(1, MealType.DINNER, "Leftovers", List.of(), null);
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.of(slot));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of());
+
+        MealBoardResponse board = mealService.removeSlot(new RemoveMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER
+        ), family);
+
+        verify(mealSlotRepository).delete(slot);
+        assertThat(board.days().get(1).slots().get(2).primary()).isNull();
+    }
+
+    @Test
+    void removeSlot_missingSlotReturnsNotFound() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.removeSlot(new RemoveMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER
+        ), family)).isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
