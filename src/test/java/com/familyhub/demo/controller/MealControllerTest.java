@@ -213,6 +213,76 @@ class MealControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    @WithMockFamily
+    void upsertSlot_missingDayIndexReturns400() throws Exception {
+        mockMvc.perform(put("/api/meals/slots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "mealType": "dinner",
+                                  "primary": {
+                                    "sourceType": "quick",
+                                    "recipeId": null,
+                                    "title": "Leftovers",
+                                    "imageUrl": null,
+                                    "note": null
+                                  },
+                                  "extras": [],
+                                  "note": null,
+                                  "collisionMode": null
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Bad Request"));
+    }
+
+    @Test
+    @WithMockFamily
+    void upsertSlot_dayIndexOutOfRangeReturns400() throws Exception {
+        mockMvc.perform(put("/api/meals/slots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "dayIndex": 7,
+                                  "mealType": "dinner",
+                                  "primary": {
+                                    "sourceType": "quick",
+                                    "recipeId": null,
+                                    "title": "Leftovers",
+                                    "imageUrl": null,
+                                    "note": null
+                                  },
+                                  "extras": [],
+                                  "note": null,
+                                  "collisionMode": null
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Bad Request"));
+    }
+
+    @Test
+    @WithMockFamily
+    void moveSlot_missingSourceDayIndexReturns400() throws Exception {
+        mockMvc.perform(post("/api/meals/slots/move")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sourceWeekStartDate": "2026-06-07",
+                                  "sourceMealType": "dinner",
+                                  "destinationWeekStartDate": "2026-06-07",
+                                  "destinationDayIndex": 1,
+                                  "destinationMealType": "dinner",
+                                  "collisionMode": "replace_primary"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Bad Request"));
+    }
+
     private MealBoardResponse sampleBoard() {
         return new MealBoardResponse(
                 WEEK_START,
