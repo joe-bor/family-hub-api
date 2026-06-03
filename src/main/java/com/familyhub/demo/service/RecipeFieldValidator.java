@@ -47,6 +47,19 @@ final class RecipeFieldValidator {
         }
     }
 
+    /**
+     * Lenient variant for imported content: returns the normalized http/https URL, or {@code null}
+     * when the value is absent or not a usable http/https URL. Unlike {@link #optionalHttpUrl},
+     * this never throws, so a cosmetic field (e.g. an unusable image URL) cannot fail the whole import.
+     */
+    static String optionalHttpUrlOrNull(String value) {
+        try {
+            return optionalHttpUrl(value, "Recipe URL");
+        } catch (BadRequestException ex) {
+            return null;
+        }
+    }
+
     static List<String> normalizedIngredients(List<String> values) {
         return normalizedList(values).stream()
                 .peek(value -> validateMaxLength(value, RecipeConstraints.INGREDIENT_MAX_LENGTH, "Recipe ingredient"))

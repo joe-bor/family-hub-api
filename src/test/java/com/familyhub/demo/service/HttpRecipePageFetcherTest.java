@@ -13,7 +13,10 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -63,6 +66,25 @@ class HttpRecipePageFetcherTest {
                 .hasMessageContaining("maximum size");
     }
 
+    @Test
+    void fetch_rejectsBodyThatExceedsTotalReadBudget() {
+        // A trickle stream that never errors and never trips the size cap, but whose cumulative
+        // read time (simulated) crosses the absolute read budget.
+        BasicClassicHttpResponse response = new BasicClassicHttpResponse(200);
+        response.setEntity(new InputStreamEntity(new TricklingInputStream(10_000), -1, ContentType.TEXT_HTML));
+
+        // First call sets the deadline at t=0 (+10s budget); each later check advances 3s, so the
+        // budget is crossed mid-stream after a few small reads, none of which hit the byte cap.
+        AtomicLong now = new AtomicLong(0);
+        LongSupplier advancingClock = () -> now.getAndAdd(java.time.Duration.ofSeconds(3).toNanos());
+        HttpRecipePageFetcher fetcher =
+                new HttpRecipePageFetcher(new StubHttpClient(response), advancingClock);
+
+        assertThatThrownBy(() -> fetcher.fetch(URI.create("https://example.com/recipe")))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("maximum read time");
+    }
+
     private static final class StubHttpClient extends CloseableHttpClient {
         private final BasicClassicHttpResponse response;
 
@@ -81,6 +103,34 @@ class HttpRecipePageFetcherTest {
 
         @Override
         public void close() {
+        }
+    }
+
+    private static final class TricklingInputStream extends InputStream {
+        private int remaining;
+
+        private TricklingInputStream(int totalBytes) {
+            this.remaining = totalBytes;
+        }
+
+        @Override
+        public int read() {
+            if (remaining <= 0) {
+                return -1;
+            }
+            remaining--;
+            return 'x';
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) {
+            if (remaining <= 0) {
+                return -1;
+            }
+            // One byte per call to model a slow drip, regardless of buffer size.
+            b[off] = 'x';
+            remaining--;
+            return 1;
         }
     }
 

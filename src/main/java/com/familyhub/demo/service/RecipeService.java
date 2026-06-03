@@ -93,9 +93,9 @@ public class RecipeService {
             ImportedRecipe imported = recipeImportService.importFromUrl(request.url().trim());
             recipe.setFamily(family);
             recipe.setTitle(RecipeFieldValidator.requiredTitle(imported.title()));
-            recipe.setImageUrl(RecipeFieldValidator.optionalHttpUrl(imported.imageUrl(), "Recipe image URL"));
+            recipe.setImageUrl(RecipeFieldValidator.optionalHttpUrlOrNull(imported.imageUrl()));
             recipe.setNote(RecipeFieldValidator.optionalText(imported.note()));
-            recipe.setSourceUrl(RecipeFieldValidator.optionalHttpUrl(imported.sourceUrl(), "Recipe source URL"));
+            recipe.setSourceUrl(RecipeFieldValidator.optionalHttpUrlOrNull(imported.sourceUrl()));
             recipe.setFavorite(imported.favorite());
             replaceIngredients(recipe, imported.ingredients());
             replaceInstructions(recipe, imported.instructions());
