@@ -88,6 +88,12 @@ public class MealService {
     public MealBoardResponse moveSlot(MoveMealSlotRequest request, Family family) {
         validateWeekStartDate(request.sourceWeekStartDate());
         validateWeekStartDate(request.destinationWeekStartDate());
+        MealSlot source = getSourceSlot(
+                family,
+                request.sourceWeekStartDate(),
+                request.sourceDayIndex(),
+                request.sourceMealType()
+        );
         if (sameSlot(
                 request.sourceWeekStartDate(),
                 request.sourceDayIndex(),
@@ -99,12 +105,6 @@ public class MealService {
             return getBoard(request.destinationWeekStartDate(), family);
         }
 
-        MealSlot source = getSourceSlot(
-                family,
-                request.sourceWeekStartDate(),
-                request.sourceDayIndex(),
-                request.sourceMealType()
-        );
         MealSlot destination = getOrCreateSlot(
                 family,
                 request.destinationWeekStartDate(),

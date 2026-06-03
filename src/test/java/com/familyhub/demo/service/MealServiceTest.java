@@ -441,6 +441,26 @@ class MealServiceTest {
     }
 
     @Test
+    void moveSlot_sameSlotWithMissingSourceReturnsNotFound() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.moveSlot(new MoveMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                MealCollisionMode.REPLACE_PRIMARY
+        ), family)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void upsertSlot_ignoresNullExtraEntries() {
         when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
                 family,
