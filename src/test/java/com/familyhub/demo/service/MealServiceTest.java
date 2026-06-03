@@ -4,12 +4,17 @@ import com.familyhub.demo.dto.MealBoardResponse;
 import com.familyhub.demo.dto.MealEntryRequest;
 import com.familyhub.demo.dto.MealSlotEntryResponse;
 import com.familyhub.demo.dto.MealSlotResponse;
+import com.familyhub.demo.dto.MoveMealSlotRequest;
 import com.familyhub.demo.dto.UpsertMealSlotRequest;
+import com.familyhub.demo.dto.DuplicateMealSlotRequest;
+import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
+import com.familyhub.demo.model.MealCollisionMode;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.MealEntrySourceType;
 import com.familyhub.demo.model.MealSlot;
 import com.familyhub.demo.model.MealSlotEntry;
+import com.familyhub.demo.model.MealSlotRole;
 import com.familyhub.demo.model.MealType;
 import com.familyhub.demo.model.Recipe;
 import com.familyhub.demo.repository.MealSlotRepository;
@@ -210,12 +215,262 @@ class MealServiceTest {
         assertThat(captor.getValue().getFamily()).isEqualTo(family);
     }
 
+    @Test
+    void upsertSlot_existingPrimaryRequiresCollisionMode() {
+        MealSlot existing = mealSlot(0, MealType.DINNER, "Pizza Night", List.of(), null);
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                0,
+                MealType.DINNER
+        )).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> mealService.upsertSlot(new UpsertMealSlotRequest(
+                WEEK_START,
+                0,
+                MealType.DINNER,
+                quickMeal("Tacos"),
+                List.of(),
+                null,
+                null
+        ), family)).isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Collision mode is required");
+    }
+
+    @Test
+    void upsertSlot_replacePrimaryReplacesExistingPrimaryAndExtras() {
+        MealSlot existing = mealSlot(0, MealType.DINNER, "Pizza Night", List.of("Garlic Knots"), "Old note");
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                0,
+                MealType.DINNER
+        )).thenReturn(Optional.of(existing));
+        when(mealSlotRepository.saveAndFlush(existing)).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
+
+        MealSlotResponse response = mealService.upsertSlot(new UpsertMealSlotRequest(
+                WEEK_START,
+                0,
+                MealType.DINNER,
+                quickMeal("Tacos"),
+                List.of(quickMeal("Guacamole")),
+                "New note",
+                MealCollisionMode.REPLACE_PRIMARY
+        ), family);
+
+        assertThat(response.primary().title()).isEqualTo("Tacos");
+        assertThat(response.extras()).extracting(MealSlotEntryResponse::title).containsExactly("Guacamole");
+        assertThat(response.note()).isEqualTo("New note");
+    }
+
+    @Test
+    void upsertSlot_addAsExtraPreservesExistingPrimaryAndAppendsRequestedBlock() {
+        MealSlot existing = mealSlot(0, MealType.DINNER, "Pizza Night", List.of("Garlic Knots"), "Keep note");
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                0,
+                MealType.DINNER
+        )).thenReturn(Optional.of(existing));
+        when(mealSlotRepository.saveAndFlush(existing)).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
+
+        MealSlotResponse response = mealService.upsertSlot(new UpsertMealSlotRequest(
+                WEEK_START,
+                0,
+                MealType.DINNER,
+                quickMeal("Tacos"),
+                List.of(quickMeal("Guacamole")),
+                "Ignored note",
+                MealCollisionMode.ADD_AS_EXTRA
+        ), family);
+
+        assertThat(response.primary().title()).isEqualTo("Pizza Night");
+        assertThat(response.extras()).extracting(MealSlotEntryResponse::title)
+                .containsExactly("Garlic Knots", "Tacos", "Guacamole");
+        assertThat(response.note()).isEqualTo("Keep note");
+    }
+
+    @Test
+    void moveSlot_replacePrimaryMovesFullBlockAndClearsSource() {
+        MealSlot source = mealSlot(1, MealType.DINNER, "Source Primary", List.of("Source Side"), "Source note");
+        MealSlot destination = mealSlot(2, MealType.DINNER, "Destination Primary", List.of(), "Destination note");
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.of(source));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                2,
+                MealType.DINNER
+        )).thenReturn(Optional.of(destination));
+        when(mealSlotRepository.saveAndFlush(any(MealSlot.class))).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of(source, destination));
+
+        MealBoardResponse board = mealService.moveSlot(new MoveMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                WEEK_START,
+                2,
+                MealType.DINNER,
+                MealCollisionMode.REPLACE_PRIMARY
+        ), family);
+
+        assertThat(board.days().get(1).slots().get(2).primary()).isNull();
+        assertThat(board.days().get(2).slots().get(2).primary().title()).isEqualTo("Source Primary");
+        assertThat(board.days().get(2).slots().get(2).extras()).extracting(MealSlotEntryResponse::title)
+                .containsExactly("Source Side");
+        assertThat(board.days().get(2).slots().get(2).note()).isEqualTo("Source note");
+    }
+
+    @Test
+    void moveSlot_addAsExtraFlattensMovedUnitIntoDestinationExtrasAndClearsSource() {
+        MealSlot source = mealSlot(1, MealType.DINNER, "Source Primary", List.of("Source Side"), null);
+        MealSlot destination = mealSlot(2, MealType.DINNER, "Destination Primary", List.of("Destination Side"), null);
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.of(source));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                2,
+                MealType.DINNER
+        )).thenReturn(Optional.of(destination));
+        when(mealSlotRepository.saveAndFlush(any(MealSlot.class))).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of(source, destination));
+
+        MealBoardResponse board = mealService.moveSlot(new MoveMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                WEEK_START,
+                2,
+                MealType.DINNER,
+                MealCollisionMode.ADD_AS_EXTRA
+        ), family);
+
+        assertThat(board.days().get(1).slots().get(2).primary()).isNull();
+        assertThat(board.days().get(2).slots().get(2).primary().title()).isEqualTo("Destination Primary");
+        assertThat(board.days().get(2).slots().get(2).extras()).extracting(MealSlotEntryResponse::title)
+                .containsExactly("Destination Side", "Source Primary", "Source Side");
+    }
+
+    @Test
+    void duplicateSlot_copiesFullBlockAndKeepsSourceSlot() {
+        MealSlot source = mealSlot(1, MealType.DINNER, "Source Primary", List.of("Source Side"), "Source note");
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.of(source));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                4,
+                MealType.DINNER
+        )).thenReturn(Optional.empty());
+        when(mealSlotRepository.saveAndFlush(any(MealSlot.class))).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenAnswer(invocation -> List.of(source, mealSlot(4, MealType.DINNER, "Source Primary", List.of("Source Side"), "Source note")));
+
+        MealBoardResponse board = mealService.duplicateSlot(new DuplicateMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                WEEK_START,
+                4,
+                MealType.DINNER,
+                MealCollisionMode.REPLACE_PRIMARY
+        ), family);
+
+        assertThat(board.days().get(1).slots().get(2).primary().title()).isEqualTo("Source Primary");
+        assertThat(board.days().get(4).slots().get(2).primary().title()).isEqualTo("Source Primary");
+        assertThat(board.days().get(4).slots().get(2).extras()).extracting(MealSlotEntryResponse::title)
+                .containsExactly("Source Side");
+        assertThat(board.days().get(4).slots().get(2).note()).isEqualTo("Source note");
+    }
+
+    @Test
+    void moveSlot_usesFamilyScopedSourceLookup() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                otherFamily,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.moveSlot(new MoveMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                WEEK_START,
+                2,
+                MealType.DINNER,
+                MealCollisionMode.REPLACE_PRIMARY
+        ), otherFamily)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void duplicateSlot_usesFamilyScopedSourceLookup() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                otherFamily,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.duplicateSlot(new DuplicateMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                WEEK_START,
+                2,
+                MealType.DINNER,
+                MealCollisionMode.REPLACE_PRIMARY
+        ), otherFamily)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
     private MealEntryRequest quickMeal(String title) {
         return new MealEntryRequest(MealEntrySourceType.QUICK, null, title, null, null);
     }
 
     private MealEntryRequest recipeMeal(UUID recipeId) {
         return new MealEntryRequest(MealEntrySourceType.RECIPE, recipeId, null, null, null);
+    }
+
+    private MealSlot mealSlot(int dayIndex, MealType mealType, String primaryTitle, List<String> extras, String note) {
+        MealSlot slot = new MealSlot();
+        slot.setId(UUID.randomUUID());
+        slot.setFamily(family);
+        slot.setWeekStartDate(WEEK_START);
+        slot.setDayIndex(dayIndex);
+        slot.setMealType(mealType);
+        slot.setNote(note);
+        slot.getEntries().add(entry(slot, MealSlotRole.PRIMARY, 0, primaryTitle));
+        for (int i = 0; i < extras.size(); i++) {
+            slot.getEntries().add(entry(slot, MealSlotRole.EXTRA, i + 1, extras.get(i)));
+        }
+        return slot;
+    }
+
+    private MealSlotEntry entry(MealSlot slot, MealSlotRole role, int sortOrder, String title) {
+        MealSlotEntry entry = new MealSlotEntry();
+        entry.setId(UUID.randomUUID());
+        entry.setSlot(slot);
+        entry.setRole(role);
+        entry.setSortOrder(sortOrder);
+        entry.setSourceType(MealEntrySourceType.QUICK);
+        entry.setTitleSnapshot(title);
+        return entry;
     }
 
     private MealSlot savedSlot(MealSlot slot) {

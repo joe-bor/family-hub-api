@@ -2,20 +2,23 @@ package com.familyhub.demo.service;
 
 import com.familyhub.demo.dto.MealBoardResponse;
 import com.familyhub.demo.dto.MealDayResponse;
+import com.familyhub.demo.dto.DuplicateMealSlotRequest;
 import com.familyhub.demo.dto.MealEntryRequest;
 import com.familyhub.demo.dto.MealSlotResponse;
+import com.familyhub.demo.dto.MoveMealSlotRequest;
 import com.familyhub.demo.dto.UpsertMealSlotRequest;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.mapper.MealMapper;
 import com.familyhub.demo.model.Family;
+import com.familyhub.demo.model.MealCollisionMode;
 import com.familyhub.demo.model.MealEntrySourceType;
 import com.familyhub.demo.model.MealSlot;
 import com.familyhub.demo.model.MealSlotEntry;
 import com.familyhub.demo.model.MealSlotRole;
 import com.familyhub.demo.model.MealType;
-import com.familyhub.demo.model.RecipeConstraints;
 import com.familyhub.demo.model.Recipe;
+import com.familyhub.demo.model.RecipeConstraints;
 import com.familyhub.demo.repository.MealSlotRepository;
 import com.familyhub.demo.repository.RecipeRepository;
 import lombok.RequiredArgsConstructor;
@@ -72,29 +75,181 @@ public class MealService {
                 request.weekStartDate(),
                 request.dayIndex(),
                 request.mealType()
-        ).orElseGet(() -> newSlot(request, family));
+        ).orElseGet(() -> newSlot(family, request.weekStartDate(), request.dayIndex(), request.mealType()));
 
-        slot.setNote(RecipeFieldValidator.optionalText(request.note()));
-        replaceEntries(slot, request.primary(), normalizedExtras(request.extras()));
+        List<MealSlotEntry> requestedEntries = snapshotEntries(slot, request.primary(), normalizedExtras(request.extras()));
+        applyRequestedBlock(slot, requestedEntries, RecipeFieldValidator.optionalText(request.note()), request.collisionMode());
 
         return MealMapper.toSlotDto(mealSlotRepository.saveAndFlush(slot));
     }
 
-    private MealSlot newSlot(UpsertMealSlotRequest request, Family family) {
-        MealSlot slot = new MealSlot();
-        slot.setFamily(family);
-        slot.setWeekStartDate(request.weekStartDate());
-        slot.setDayIndex(request.dayIndex());
-        slot.setMealType(request.mealType());
+    @Transactional
+    public MealBoardResponse moveSlot(MoveMealSlotRequest request, Family family) {
+        validateWeekStartDate(request.sourceWeekStartDate());
+        validateWeekStartDate(request.destinationWeekStartDate());
+        if (sameSlot(
+                request.sourceWeekStartDate(),
+                request.sourceDayIndex(),
+                request.sourceMealType(),
+                request.destinationWeekStartDate(),
+                request.destinationDayIndex(),
+                request.destinationMealType()
+        )) {
+            return getBoard(request.destinationWeekStartDate(), family);
+        }
+
+        MealSlot source = getSourceSlot(
+                family,
+                request.sourceWeekStartDate(),
+                request.sourceDayIndex(),
+                request.sourceMealType()
+        );
+        MealSlot destination = getOrCreateSlot(
+                family,
+                request.destinationWeekStartDate(),
+                request.destinationDayIndex(),
+                request.destinationMealType()
+        );
+        List<MealSlotEntry> movingEntries = copyEntries(source, destination);
+
+        applyCopiedBlock(destination, movingEntries, source.getNote(), request.collisionMode());
+        clearSlot(source);
+
+        mealSlotRepository.saveAndFlush(destination);
+        mealSlotRepository.saveAndFlush(source);
+        return getBoard(request.destinationWeekStartDate(), family);
+    }
+
+    @Transactional
+    public MealBoardResponse duplicateSlot(DuplicateMealSlotRequest request, Family family) {
+        validateWeekStartDate(request.sourceWeekStartDate());
+        validateWeekStartDate(request.destinationWeekStartDate());
+        MealSlot source = getSourceSlot(
+                family,
+                request.sourceWeekStartDate(),
+                request.sourceDayIndex(),
+                request.sourceMealType()
+        );
+        MealSlot destination = getOrCreateSlot(
+                family,
+                request.destinationWeekStartDate(),
+                request.destinationDayIndex(),
+                request.destinationMealType()
+        );
+
+        applyCopiedBlock(destination, copyEntries(source, destination), source.getNote(), request.collisionMode());
+
+        mealSlotRepository.saveAndFlush(destination);
+        return getBoard(request.destinationWeekStartDate(), family);
+    }
+
+    private MealSlot getSourceSlot(Family family, LocalDate weekStartDate, int dayIndex, MealType mealType) {
+        MealSlot slot = mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                weekStartDate,
+                dayIndex,
+                mealType
+        ).orElseThrow(() -> new ResourceNotFoundException("Meal slot not found."));
+        if (!hasPrimary(slot)) {
+            throw new ResourceNotFoundException("Meal slot not found.");
+        }
         return slot;
     }
 
-    private void replaceEntries(MealSlot slot, MealEntryRequest primary, List<MealEntryRequest> extras) {
-        slot.getEntries().clear();
-        slot.getEntries().add(snapshotEntry(primary, slot, MealSlotRole.PRIMARY, 0));
-        for (int i = 0; i < extras.size(); i++) {
-            slot.getEntries().add(snapshotEntry(extras.get(i), slot, MealSlotRole.EXTRA, i + 1));
+    private MealSlot getOrCreateSlot(Family family, LocalDate weekStartDate, int dayIndex, MealType mealType) {
+        return mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                weekStartDate,
+                dayIndex,
+                mealType
+        ).orElseGet(() -> newSlot(family, weekStartDate, dayIndex, mealType));
+    }
+
+    private MealSlot newSlot(Family family, LocalDate weekStartDate, int dayIndex, MealType mealType) {
+        MealSlot slot = new MealSlot();
+        slot.setFamily(family);
+        slot.setWeekStartDate(weekStartDate);
+        slot.setDayIndex(dayIndex);
+        slot.setMealType(mealType);
+        return slot;
+    }
+
+    private void applyRequestedBlock(
+            MealSlot slot,
+            List<MealSlotEntry> requestedEntries,
+            String requestedNote,
+            MealCollisionMode collisionMode
+    ) {
+        applyBlock(slot, requestedEntries, requestedNote, collisionMode, true);
+    }
+
+    private void applyCopiedBlock(
+            MealSlot slot,
+            List<MealSlotEntry> copiedEntries,
+            String copiedNote,
+            MealCollisionMode collisionMode
+    ) {
+        applyBlock(slot, copiedEntries, copiedNote, collisionMode, false);
+    }
+
+    private void applyBlock(
+            MealSlot slot,
+            List<MealSlotEntry> incomingEntries,
+            String incomingNote,
+            MealCollisionMode collisionMode,
+            boolean collisionModeMayBeAbsent
+    ) {
+        if (hasPrimary(slot)) {
+            if (collisionMode == null) {
+                throw new BadRequestException("Collision mode is required when target slot already has a primary meal.");
+            }
+            if (collisionMode == MealCollisionMode.ADD_AS_EXTRA) {
+                appendAsExtras(slot, incomingEntries);
+                return;
+            }
+        } else if (!collisionModeMayBeAbsent && collisionMode == null) {
+            throw new BadRequestException("Collision mode is required.");
         }
+
+        replaceEntries(slot, incomingEntries);
+        slot.setNote(incomingNote);
+    }
+
+    private void replaceEntries(MealSlot slot, List<MealSlotEntry> entries) {
+        boolean needsOrphanFlush = slot.getId() != null && !slot.getEntries().isEmpty();
+        slot.getEntries().clear();
+        if (needsOrphanFlush) {
+            mealSlotRepository.saveAndFlush(slot);
+        }
+        for (int i = 0; i < entries.size(); i++) {
+            MealSlotEntry entry = entries.get(i);
+            entry.setSlot(slot);
+            entry.setRole(i == 0 ? MealSlotRole.PRIMARY : MealSlotRole.EXTRA);
+            entry.setSortOrder(i);
+            slot.getEntries().add(entry);
+        }
+    }
+
+    private void appendAsExtras(MealSlot slot, List<MealSlotEntry> entries) {
+        int nextSortOrder = slot.getEntries().stream()
+                .mapToInt(MealSlotEntry::getSortOrder)
+                .max()
+                .orElse(0) + 1;
+        for (MealSlotEntry entry : entries) {
+            entry.setSlot(slot);
+            entry.setRole(MealSlotRole.EXTRA);
+            entry.setSortOrder(nextSortOrder++);
+            slot.getEntries().add(entry);
+        }
+    }
+
+    private List<MealSlotEntry> snapshotEntries(MealSlot slot, MealEntryRequest primary, List<MealEntryRequest> extras) {
+        List<MealSlotEntry> entries = new ArrayList<>();
+        entries.add(snapshotEntry(primary, slot, MealSlotRole.PRIMARY, 0));
+        for (int i = 0; i < extras.size(); i++) {
+            entries.add(snapshotEntry(extras.get(i), slot, MealSlotRole.EXTRA, i + 1));
+        }
+        return entries;
     }
 
     private List<MealEntryRequest> normalizedExtras(List<MealEntryRequest> extras) {
@@ -102,6 +257,31 @@ public class MealService {
             return List.of();
         }
         return extras;
+    }
+
+    private List<MealSlotEntry> copyEntries(MealSlot source, MealSlot destination) {
+        return source.getEntries().stream()
+                .sorted((left, right) -> Integer.compare(left.getSortOrder(), right.getSortOrder()))
+                .map(entry -> copyEntry(entry, destination))
+                .toList();
+    }
+
+    private MealSlotEntry copyEntry(MealSlotEntry source, MealSlot destination) {
+        MealSlotEntry copy = new MealSlotEntry();
+        copy.setSlot(destination);
+        copy.setRole(source.getRole());
+        copy.setSortOrder(source.getSortOrder());
+        copy.setSourceType(source.getSourceType());
+        copy.setRecipe(source.getRecipe());
+        copy.setTitleSnapshot(source.getTitleSnapshot());
+        copy.setImageUrlSnapshot(source.getImageUrlSnapshot());
+        copy.setNoteSnapshot(source.getNoteSnapshot());
+        return copy;
+    }
+
+    private void clearSlot(MealSlot slot) {
+        slot.getEntries().clear();
+        slot.setNote(null);
     }
 
     private MealSlotEntry snapshotEntry(MealEntryRequest request, MealSlot slot, MealSlotRole role, int sortOrder) {
@@ -153,6 +333,23 @@ public class MealService {
         if (weekStartDate.getDayOfWeek() != DayOfWeek.SUNDAY) {
             throw new BadRequestException("Week start date must be a Sunday.");
         }
+    }
+
+    private boolean hasPrimary(MealSlot slot) {
+        return slot.getEntries().stream().anyMatch(entry -> entry.getRole() == MealSlotRole.PRIMARY);
+    }
+
+    private boolean sameSlot(
+            LocalDate sourceWeekStartDate,
+            int sourceDayIndex,
+            MealType sourceMealType,
+            LocalDate destinationWeekStartDate,
+            int destinationDayIndex,
+            MealType destinationMealType
+    ) {
+        return sourceWeekStartDate.equals(destinationWeekStartDate)
+                && sourceDayIndex == destinationDayIndex
+                && sourceMealType == destinationMealType;
     }
 
     private record SlotKey(int dayIndex, MealType mealType) {

@@ -50,6 +50,7 @@ public final class MealMapper {
     public static MealSlotEntryResponse toEntryDto(MealSlotEntry entry) {
         return new MealSlotEntryResponse(
                 entry.getId(),
+                entry.getRole(),
                 entry.getSourceType(),
                 entry.getRecipe() == null ? null : entry.getRecipe().getId(),
                 entry.getTitleSnapshot(),
