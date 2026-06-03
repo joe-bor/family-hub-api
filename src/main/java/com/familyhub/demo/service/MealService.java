@@ -6,6 +6,7 @@ import com.familyhub.demo.dto.DuplicateMealSlotRequest;
 import com.familyhub.demo.dto.MealEntryRequest;
 import com.familyhub.demo.dto.MealSlotResponse;
 import com.familyhub.demo.dto.MoveMealSlotRequest;
+import com.familyhub.demo.dto.RemoveMealSlotRequest;
 import com.familyhub.demo.dto.UpsertMealSlotRequest;
 import com.familyhub.demo.exception.BadRequestException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
@@ -142,6 +143,19 @@ public class MealService {
 
         mealSlotRepository.saveAndFlush(destination);
         return getBoard(request.destinationWeekStartDate(), family);
+    }
+
+    @Transactional
+    public MealBoardResponse removeSlot(RemoveMealSlotRequest request, Family family) {
+        validateWeekStartDate(request.weekStartDate());
+        MealSlot slot = getSourceSlot(
+                family,
+                request.weekStartDate(),
+                request.dayIndex(),
+                request.mealType()
+        );
+        mealSlotRepository.delete(slot);
+        return getBoard(request.weekStartDate(), family);
     }
 
     private MealSlot getSourceSlot(Family family, LocalDate weekStartDate, int dayIndex, MealType mealType) {
