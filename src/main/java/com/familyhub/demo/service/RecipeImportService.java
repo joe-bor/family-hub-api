@@ -136,7 +136,7 @@ public class RecipeImportService {
 
         return new ImportedRecipe(
                 title.trim(),
-                firstImage(recipeNode.path("image")),
+                resolveAgainstBase(sourceUrl, firstImage(recipeNode.path("image"))),
                 stringList(recipeNode.path("recipeIngredient")),
                 instructionList(recipeNode.path("recipeInstructions")),
                 null,
@@ -144,6 +144,24 @@ public class RecipeImportService {
                 List.of(),
                 false
         );
+    }
+
+    /**
+     * Resolves a possibly relative or protocol-relative URL (e.g. {@code //cdn/x.jpg}, {@code /img/x.jpg})
+     * against the page's source URL so it becomes absolute. Returns {@code null} when the value is blank
+     * or cannot be resolved to an absolute URL; the write path then drops unusable values instead of
+     * failing the whole import.
+     */
+    private String resolveAgainstBase(String sourceUrl, String rawUrl) {
+        if (rawUrl == null || rawUrl.isBlank()) {
+            return null;
+        }
+        try {
+            URI resolved = URI.create(sourceUrl).resolve(rawUrl.trim());
+            return resolved.isAbsolute() ? resolved.toString() : null;
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private String firstImage(JsonNode imageNode) {

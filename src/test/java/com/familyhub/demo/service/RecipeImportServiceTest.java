@@ -53,6 +53,40 @@ class RecipeImportServiceTest {
     }
 
     @Test
+    void parseHtml_resolvesProtocolRelativeImageAgainstBase() {
+        String html = """
+                <script type="application/ld+json">
+                {
+                  "@type":"Recipe",
+                  "name":"Tacos",
+                  "image":"//cdn.example.com/tacos.jpg"
+                }
+                </script>
+                """;
+
+        ImportedRecipe imported = recipeImportService.parseHtml("https://example.com/recipes/tacos", html);
+
+        assertThat(imported.imageUrl()).isEqualTo("https://cdn.example.com/tacos.jpg");
+    }
+
+    @Test
+    void parseHtml_resolvesRootRelativeImageAgainstBase() {
+        String html = """
+                <script type="application/ld+json">
+                {
+                  "@type":"Recipe",
+                  "name":"Tacos",
+                  "image":"/img/tacos.jpg"
+                }
+                </script>
+                """;
+
+        ImportedRecipe imported = recipeImportService.parseHtml("https://example.com/recipes/tacos", html);
+
+        assertThat(imported.imageUrl()).isEqualTo("https://example.com/img/tacos.jpg");
+    }
+
+    @Test
     void parseHtml_extractsHowToStepInstructionText() {
         String html = """
                 <script type="application/ld+json">

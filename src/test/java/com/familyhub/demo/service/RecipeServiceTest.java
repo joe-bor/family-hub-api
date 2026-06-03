@@ -284,6 +284,34 @@ class RecipeServiceTest {
         assertThat(captor.getValue().getFamily()).isEqualTo(family);
     }
 
+    @Test
+    void importRecipe_dropsUnusableImageUrlButStillSaves() {
+        when(recipeImportService.importFromUrl("https://example.com/tacos"))
+                .thenReturn(new ImportedRecipe(
+                        "Weeknight Tacos",
+                        "data:image/png;base64,AAAA",
+                        List.of("1 lb beef"),
+                        List.of("Brown beef"),
+                        null,
+                        "https://example.com/tacos",
+                        List.of(),
+                        false
+                ));
+        when(recipeRepository.saveAndFlush(any(Recipe.class))).thenAnswer(invocation -> savedRecipe(invocation.getArgument(0)));
+
+        RecipeDetailResponse response = recipeService.importRecipe(
+                new ImportRecipeRequest("https://example.com/tacos"),
+                family
+        );
+
+        assertThat(response.title()).isEqualTo("Weeknight Tacos");
+
+        ArgumentCaptor<Recipe> captor = ArgumentCaptor.forClass(Recipe.class);
+        verify(recipeRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getImageUrl()).isNull();
+        assertThat(captor.getValue().getIngredients()).hasSize(1);
+    }
+
     private Recipe savedRecipe(Recipe recipe) {
         recipe.setId(RECIPE_ID);
         recipe.setCreatedAt(LocalDateTime.of(2026, 6, 2, 9, 0));

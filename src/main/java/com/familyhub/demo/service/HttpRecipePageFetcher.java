@@ -21,23 +21,35 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.function.LongSupplier;
 
 @Component
 public class HttpRecipePageFetcher implements RecipePageFetcher {
     static final int MAX_RESPONSE_BYTES = 1_000_000;
     private static final Timeout CONNECT_TIMEOUT = Timeout.ofSeconds(3);
     private static final Timeout READ_TIMEOUT = Timeout.ofSeconds(5);
+    // Absolute wall-clock cap on the whole body read. READ_TIMEOUT only bounds inactivity between
+    // reads, so a server trickling bytes just under both that gap and the size cap could otherwise
+    // hold a pooled connection indefinitely.
+    static final Duration MAX_TOTAL_READ = Duration.ofSeconds(10);
     private static final String USER_AGENT = "FamilyHubRecipeImporter/1.0";
 
     private final CloseableHttpClient httpClient;
+    private final LongSupplier nanoTimeSource;
 
     @Autowired
     public HttpRecipePageFetcher(RecipeImportNetworkGuard networkGuard) {
-        this(createHttpClient(networkGuard));
+        this(createHttpClient(networkGuard), System::nanoTime);
     }
 
     HttpRecipePageFetcher(CloseableHttpClient httpClient) {
+        this(httpClient, System::nanoTime);
+    }
+
+    HttpRecipePageFetcher(CloseableHttpClient httpClient, LongSupplier nanoTimeSource) {
         this.httpClient = httpClient;
+        this.nanoTimeSource = nanoTimeSource;
     }
 
     @Override
@@ -106,11 +118,15 @@ public class HttpRecipePageFetcher implements RecipePageFetcher {
     }
 
     private String readCappedBody(InputStream body) throws IOException {
+        long deadline = nanoTimeSource.getAsLong() + MAX_TOTAL_READ.toNanos();
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
             int total = 0;
             int read;
             while ((read = body.read(buffer)) != -1) {
+                if (nanoTimeSource.getAsLong() > deadline) {
+                    throw new IOException("Recipe import exceeded maximum read time.");
+                }
                 total += read;
                 if (total > MAX_RESPONSE_BYTES) {
                     throw new IOException("Recipe import response exceeded maximum size.");
