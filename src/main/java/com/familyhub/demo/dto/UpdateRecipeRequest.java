@@ -1,18 +1,20 @@
 package com.familyhub.demo.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.familyhub.demo.model.RecipeConstraints;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
 public class UpdateRecipeRequest {
 
-    @Size(max = 160, message = "Recipe title must be 160 characters or less")
+    @Size(max = RecipeConstraints.TITLE_MAX_LENGTH, message = "Recipe title must be 160 characters or less")
     private String title;
 
     private String imageUrl;
 
-    private List<String> ingredients;
+    private List<@NotBlank @Size(max = RecipeConstraints.INGREDIENT_MAX_LENGTH) String> ingredients;
 
     private List<String> instructions;
 
@@ -20,7 +22,7 @@ public class UpdateRecipeRequest {
 
     private String sourceUrl;
 
-    private List<String> tags;
+    private List<@NotBlank @Size(max = RecipeConstraints.TAG_MAX_LENGTH) String> tags;
 
     private Boolean favorite;
 
@@ -34,34 +36,6 @@ public class UpdateRecipeRequest {
     private boolean favoriteSet;
 
     public UpdateRecipeRequest() {
-    }
-
-    public UpdateRecipeRequest(
-            String title,
-            String imageUrl,
-            List<String> ingredients,
-            List<String> instructions,
-            String note,
-            String sourceUrl,
-            List<String> tags,
-            Boolean favorite
-    ) {
-        this.title = title;
-        this.titleSet = title != null;
-        this.imageUrl = imageUrl;
-        this.imageUrlSet = imageUrl != null;
-        this.ingredients = ingredients;
-        this.ingredientsSet = ingredients != null;
-        this.instructions = instructions;
-        this.instructionsSet = instructions != null;
-        this.note = note;
-        this.noteSet = note != null;
-        this.sourceUrl = sourceUrl;
-        this.sourceUrlSet = sourceUrl != null;
-        this.tags = tags;
-        this.tagsSet = tags != null;
-        this.favorite = favorite;
-        this.favoriteSet = favorite != null;
     }
 
     public String title() {

@@ -4,27 +4,14 @@ import com.familyhub.demo.exception.BadRequestException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.Inet4Address;
-import java.net.Inet6Address;
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 
@@ -32,43 +19,40 @@ import java.util.stream.StreamSupport;
 public class RecipeImportService {
     private static final int MAX_REDIRECTS = 3;
     private static final int MAX_RESPONSE_BYTES = 1_000_000;
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
     private static final String IMPORT_FAILURE_MESSAGE = "Could not import recipe.";
 
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final RecipePageFetcher pageFetcher;
+    private final RecipeImportNetworkGuard networkGuard;
 
-    @Autowired
-    public RecipeImportService(ObjectMapper objectMapper) {
-        this(objectMapper, HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(3))
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .build());
-    }
-
-    public RecipeImportService(ObjectMapper objectMapper, HttpClient httpClient) {
+    public RecipeImportService(
+            ObjectMapper objectMapper,
+            RecipePageFetcher pageFetcher,
+            RecipeImportNetworkGuard networkGuard
+    ) {
         this.objectMapper = objectMapper;
-        this.httpClient = httpClient;
+        this.pageFetcher = pageFetcher;
+        this.networkGuard = networkGuard;
     }
 
     public ImportedRecipe importFromUrl(String url) {
         try {
-            URI uri = validatePublicHttpUri(url);
+            URI uri = networkGuard.validatePublicHttpUri(url);
             for (int redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
-                HttpResponse<InputStream> response = httpClient.send(buildRequest(uri), HttpResponse.BodyHandlers.ofInputStream());
+                FetchedRecipePage response = pageFetcher.fetch(uri);
                 int statusCode = response.statusCode();
                 if (isRedirect(statusCode)) {
                     if (redirects == MAX_REDIRECTS) {
                         throw importFailure();
                     }
-                    uri = validatePublicHttpUri(resolveRedirect(uri, response));
+                    uri = networkGuard.validatePublicHttpUri(resolveRedirect(uri, response));
                     continue;
                 }
                 if (statusCode < 200 || statusCode >= 300) {
                     throw importFailure();
                 }
 
-                String html = readCappedBody(response);
+                String html = readCappedBody(response.body());
                 return parseHtml(uri.toString(), html);
             }
             throw importFailure();
@@ -80,125 +64,33 @@ public class RecipeImportService {
     }
 
     public ImportedRecipe parseHtml(String sourceUrl, String html) {
-        try {
-            Document document = Jsoup.parse(html, sourceUrl);
-            for (Element script : document.select("script[type=application/ld+json]")) {
+        Document document = Jsoup.parse(html, sourceUrl);
+        for (Element script : document.select("script[type=application/ld+json]")) {
+            try {
                 Optional<JsonNode> recipeNode = findRecipeNode(objectMapper.readTree(script.data()));
                 if (recipeNode.isPresent()) {
                     return toImportedRecipe(sourceUrl, document, recipeNode.get());
                 }
+            } catch (JacksonException ignored) {
+                // Recipe pages often include several JSON-LD blocks. Ignore malformed blocks and keep looking.
             }
-            throw importFailure();
-        } catch (JacksonException ex) {
-            throw importFailure();
         }
+        throw importFailure();
     }
 
-    private HttpRequest buildRequest(URI uri) {
-        return HttpRequest.newBuilder(uri)
-                .timeout(REQUEST_TIMEOUT)
-                .GET()
-                .header("User-Agent", "FamilyHubRecipeImporter/1.0")
-                .build();
-    }
-
-    private String readCappedBody(HttpResponse<InputStream> response) throws IOException {
-        Optional<Long> contentLength = response.headers().firstValueAsLong("content-length").stream().boxed().findFirst();
-        if (contentLength.isPresent() && contentLength.get() > MAX_RESPONSE_BYTES) {
+    private String readCappedBody(String body) {
+        if (body == null || body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_RESPONSE_BYTES) {
             throw importFailure();
         }
-
-        try (InputStream body = response.body(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int total = 0;
-            int read;
-            while ((read = body.read(buffer)) != -1) {
-                total += read;
-                if (total > MAX_RESPONSE_BYTES) {
-                    throw importFailure();
-                }
-                output.write(buffer, 0, read);
-            }
-            return output.toString(java.nio.charset.StandardCharsets.UTF_8);
-        }
+        return body;
     }
 
-    private URI resolveRedirect(URI currentUri, HttpResponse<InputStream> response) {
-        String location = response.headers().firstValue("location")
-                .orElseThrow(RecipeImportService::importFailure);
+    private URI resolveRedirect(URI currentUri, FetchedRecipePage response) {
+        String location = response.redirectLocation();
+        if (location == null || location.isBlank()) {
+            throw importFailure();
+        }
         return currentUri.resolve(location);
-    }
-
-    private URI validatePublicHttpUri(String url) {
-        try {
-            return validatePublicHttpUri(new URI(url.trim()));
-        } catch (URISyntaxException | RuntimeException ex) {
-            throw importFailure();
-        }
-    }
-
-    private URI validatePublicHttpUri(URI uri) {
-        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-        if (!scheme.equals("http") && !scheme.equals("https")) {
-            throw importFailure();
-        }
-        String host = uri.getHost();
-        if (host == null || host.isBlank()) {
-            throw importFailure();
-        }
-
-        try {
-            for (InetAddress address : InetAddress.getAllByName(host)) {
-                if (!isPublicAddress(address)) {
-                    throw importFailure();
-                }
-            }
-        } catch (IOException ex) {
-            throw importFailure();
-        }
-        return uri;
-    }
-
-    private boolean isPublicAddress(InetAddress address) {
-        if (address.isAnyLocalAddress()
-                || address.isLoopbackAddress()
-                || address.isLinkLocalAddress()
-                || address.isSiteLocalAddress()
-                || address.isMulticastAddress()) {
-            return false;
-        }
-
-        byte[] bytes = address.getAddress();
-        if (address instanceof Inet4Address) {
-            int first = bytes[0] & 0xff;
-            int second = bytes[1] & 0xff;
-            if (first == 0 || first == 10 || first == 127 || first >= 224) {
-                return false;
-            }
-            if (first == 100 && second >= 64 && second <= 127) {
-                return false;
-            }
-            if (first == 169 && second == 254) {
-                return false;
-            }
-            if (first == 172 && second >= 16 && second <= 31) {
-                return false;
-            }
-            if (first == 192 && (second == 0 || second == 168)) {
-                return false;
-            }
-            if (first == 198 && (second == 18 || second == 19 || second == 51)) {
-                return false;
-            }
-            return !(first == 203 && second == 0);
-        }
-
-        if (address instanceof Inet6Address) {
-            int first = bytes[0] & 0xff;
-            return (first & 0xfe) != 0xfc;
-        }
-
-        return false;
     }
 
     private Optional<JsonNode> findRecipeNode(JsonNode root) {

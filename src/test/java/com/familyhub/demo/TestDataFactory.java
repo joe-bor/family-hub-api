@@ -343,7 +343,7 @@ public final class TestDataFactory {
 
     public static Recipe createRecipe(Family family, String title) {
         Recipe recipe = new Recipe();
-        recipe.setId(RECIPE_ID);
+        recipe.setId(UUID.randomUUID());
         recipe.setFamily(family);
         recipe.setTitle(title);
         recipe.setImageUrl(null);
