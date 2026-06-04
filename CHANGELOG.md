@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.5.0](https://github.com/joe-bor/family-hub-api/compare/v1.4.1...v1.5.0) (2026-06-04)
+
+
+### Features
+
+* **meals:** add meal board foundation ([1dc95e1](https://github.com/joe-bor/family-hub-api/commit/1dc95e101934ce36e34659a8b23046dd83bb1883))
+* **meals:** add meal slot write flows ([6d232dd](https://github.com/joe-bor/family-hub-api/commit/6d232dddb73afb7d427d2e81cd5176f09766536a))
+* **meals:** add optimistic locking and conflict handling ([c0b8e29](https://github.com/joe-bor/family-hub-api/commit/c0b8e29c61a8760ad8fc754efb7b8089f6e55d31))
+* **meals:** add remove meal slot endpoint ([328b40b](https://github.com/joe-bor/family-hub-api/commit/328b40b7fc51145b6823bfb4f91d4344af985e9c))
+
+
+### Bug Fixes
+
+* **meals:** constrain meal enum columns in schema ([1cf0fc3](https://github.com/joe-bor/family-hub-api/commit/1cf0fc381d30046139b9ec707d1918d901eeb204))
+* **meals:** delete source slot row on move ([cb93f9e](https://github.com/joe-bor/family-hub-api/commit/cb93f9ef993d99fed4df46bcc93f7c7b89e831d1))
+* **meals:** enforce lowercase enum wire values ([30dc513](https://github.com/joe-bor/family-hub-api/commit/30dc513866807a909a0737c87832e9da5ab66fb9))
+* **meals:** guard duplicate onto the same slot ([ebc23f8](https://github.com/joe-bor/family-hub-api/commit/ebc23f844c3b139570e9227231cf4c9334d53c2a))
+* **meals:** harden board aggregation against duplicate slot rows ([f1ca2c0](https://github.com/joe-bor/family-hub-api/commit/f1ca2c06b32d15b24bed99fe5ced39975264a741))
+* **meals:** ignore null meal extra entries ([22891bc](https://github.com/joe-bor/family-hub-api/commit/22891bcc76640edfbd79fd17039579fe554c1f92))
+* **meals:** require dayIndex in slot requests ([b7f8e70](https://github.com/joe-bor/family-hub-api/commit/b7f8e70ef0287e4bbc66678573cc59d05095330e))
+* **meals:** validate source slot on same-slot move ([feb2fb5](https://github.com/joe-bor/family-hub-api/commit/feb2fb5847f81e4e2251926782d7e5ed0a832609))
+* **recipes:** address import safety review ([d84c1a9](https://github.com/joe-bor/family-hub-api/commit/d84c1a98fb046c6cdaa306968f2cf4659ce76bcd))
+* **recipes:** harden import url handling and add read-time cap ([79cbb8e](https://github.com/joe-bor/family-hub-api/commit/79cbb8edf755eca967ea216275d3f8c02ea915da))
+
+
+### Performance Improvements
+
+* **meals:** fetch meal entry recipe lazily ([3efb096](https://github.com/joe-bor/family-hub-api/commit/3efb0966dd5b238c4c2754f8bba06043269617cd))
+
+
+### Code Refactoring
+
+* **meals:** drop dead role/sortOrder assignment in snapshot ([0a38398](https://github.com/joe-bor/family-hub-api/commit/0a38398a31a1d620250b6dd62e286c713d348559))
+
+
+### Tests
+
+* **meals:** cover validation and cross-week edge cases ([ab8def8](https://github.com/joe-bor/family-hub-api/commit/ab8def80bbf2753d7779333ca96ce7c15568c8ab))
+
 ## [1.4.1](https://github.com/joe-bor/family-hub-api/compare/v1.4.0...v1.4.1) (2026-06-01)
 
 
