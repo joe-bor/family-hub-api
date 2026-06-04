@@ -19,6 +19,8 @@ import com.familyhub.demo.service.MealService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -315,6 +317,62 @@ class MealControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Bad Request"));
+    }
+
+    @Test
+    @WithMockFamily
+    void upsertSlot_dataIntegrityViolationReturns409() throws Exception {
+        given(mealService.upsertSlot(any(), any(Family.class)))
+                .willThrow(new DataIntegrityViolationException("duplicate slot"));
+
+        mockMvc.perform(put("/api/meals/slots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "dayIndex": 0,
+                                  "mealType": "dinner",
+                                  "primary": {
+                                    "sourceType": "quick",
+                                    "recipeId": null,
+                                    "title": "Leftovers",
+                                    "imageUrl": null,
+                                    "note": null
+                                  },
+                                  "extras": [],
+                                  "note": null,
+                                  "collisionMode": null
+                                }
+                                """))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @WithMockFamily
+    void upsertSlot_optimisticLockConflictReturns409() throws Exception {
+        given(mealService.upsertSlot(any(), any(Family.class)))
+                .willThrow(new OptimisticLockingFailureException("stale meal slot"));
+
+        mockMvc.perform(put("/api/meals/slots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "dayIndex": 0,
+                                  "mealType": "dinner",
+                                  "primary": {
+                                    "sourceType": "quick",
+                                    "recipeId": null,
+                                    "title": "Leftovers",
+                                    "imageUrl": null,
+                                    "note": null
+                                  },
+                                  "extras": [],
+                                  "note": null,
+                                  "collisionMode": null
+                                }
+                                """))
+                .andExpect(status().isConflict());
     }
 
     @Test
