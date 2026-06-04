@@ -5,6 +5,7 @@ CREATE TABLE meal_slot (
     day_index INTEGER NOT NULL,
     meal_type VARCHAR(20) NOT NULL,
     note TEXT,
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP(6) DEFAULT now(),
     updated_at TIMESTAMP(6) DEFAULT now(),
     CONSTRAINT fk_meal_slot_family
