@@ -311,7 +311,7 @@ class MealServiceTest {
         )).thenReturn(Optional.of(destination));
         when(mealSlotRepository.saveAndFlush(any(MealSlot.class))).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
         when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
-                .thenReturn(List.of(source, destination));
+                .thenReturn(List.of(destination));
 
         MealBoardResponse board = mealService.moveSlot(new MoveMealSlotRequest(
                 WEEK_START,
@@ -328,6 +328,7 @@ class MealServiceTest {
         assertThat(board.days().get(2).slots().get(2).extras()).extracting(MealSlotEntryResponse::title)
                 .containsExactly("Source Side");
         assertThat(board.days().get(2).slots().get(2).note()).isEqualTo("Source note");
+        verify(mealSlotRepository).delete(source);
     }
 
     @Test
@@ -348,7 +349,7 @@ class MealServiceTest {
         )).thenReturn(Optional.of(destination));
         when(mealSlotRepository.saveAndFlush(any(MealSlot.class))).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
         when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
-                .thenReturn(List.of(source, destination));
+                .thenReturn(List.of(destination));
 
         MealBoardResponse board = mealService.moveSlot(new MoveMealSlotRequest(
                 WEEK_START,
