@@ -272,9 +272,9 @@ public class MealService {
 
     private List<MealSlotEntry> snapshotEntries(MealSlot slot, MealEntryRequest primary, List<MealEntryRequest> extras) {
         List<MealSlotEntry> entries = new ArrayList<>();
-        entries.add(snapshotEntry(primary, slot, MealSlotRole.PRIMARY, 0));
-        for (int i = 0; i < extras.size(); i++) {
-            entries.add(snapshotEntry(extras.get(i), slot, MealSlotRole.EXTRA, i + 1));
+        entries.add(snapshotEntry(primary, slot));
+        for (MealEntryRequest extra : extras) {
+            entries.add(snapshotEntry(extra, slot));
         }
         return entries;
     }
@@ -306,11 +306,9 @@ public class MealService {
         return copy;
     }
 
-    private MealSlotEntry snapshotEntry(MealEntryRequest request, MealSlot slot, MealSlotRole role, int sortOrder) {
+    private MealSlotEntry snapshotEntry(MealEntryRequest request, MealSlot slot) {
         MealSlotEntry entry = new MealSlotEntry();
         entry.setSlot(slot);
-        entry.setRole(role);
-        entry.setSortOrder(sortOrder);
         entry.setSourceType(request.sourceType());
 
         if (request.sourceType() == MealEntrySourceType.RECIPE) {
