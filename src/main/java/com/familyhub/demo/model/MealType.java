@@ -27,7 +27,7 @@ public enum MealType {
             throw new IllegalArgumentException("Meal type is required.");
         }
         return Arrays.stream(values())
-                .filter(type -> type.wireValue.equalsIgnoreCase(value) || type.name().equalsIgnoreCase(value))
+                .filter(type -> type.wireValue.equals(value))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown meal type: " + value));
     }

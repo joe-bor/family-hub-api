@@ -26,7 +26,7 @@ public enum MealCollisionMode {
             throw new IllegalArgumentException("Meal collision mode is required.");
         }
         return Arrays.stream(values())
-                .filter(mode -> mode.wireValue.equalsIgnoreCase(value) || mode.name().equalsIgnoreCase(value))
+                .filter(mode -> mode.wireValue.equals(value))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown meal collision mode: " + value));
     }

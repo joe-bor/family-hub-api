@@ -317,6 +317,31 @@ class MealControllerTest {
                 .andExpect(jsonPath("$.message").value("Bad Request"));
     }
 
+    @Test
+    @WithMockFamily
+    void upsertSlot_uppercaseEnumValueReturns400() throws Exception {
+        mockMvc.perform(put("/api/meals/slots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "dayIndex": 0,
+                                  "mealType": "DINNER",
+                                  "primary": {
+                                    "sourceType": "quick",
+                                    "recipeId": null,
+                                    "title": "Leftovers",
+                                    "imageUrl": null,
+                                    "note": null
+                                  },
+                                  "extras": [],
+                                  "note": null,
+                                  "collisionMode": null
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
     private MealBoardResponse sampleBoard() {
         return new MealBoardResponse(
                 WEEK_START,

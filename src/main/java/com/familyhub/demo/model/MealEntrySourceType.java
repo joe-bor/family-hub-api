@@ -26,7 +26,7 @@ public enum MealEntrySourceType {
             throw new IllegalArgumentException("Meal entry source type is required.");
         }
         return Arrays.stream(values())
-                .filter(type -> type.wireValue.equalsIgnoreCase(value) || type.name().equalsIgnoreCase(value))
+                .filter(type -> type.wireValue.equals(value))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown meal entry source type: " + value));
     }
