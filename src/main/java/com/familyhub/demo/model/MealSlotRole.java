@@ -26,7 +26,7 @@ public enum MealSlotRole {
             throw new IllegalArgumentException("Meal slot role is required.");
         }
         return Arrays.stream(values())
-                .filter(role -> role.wireValue.equalsIgnoreCase(value) || role.name().equalsIgnoreCase(value))
+                .filter(role -> role.wireValue.equals(value))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown meal slot role: " + value));
     }
