@@ -132,6 +132,16 @@ public class MealService {
                 request.sourceDayIndex(),
                 request.sourceMealType()
         );
+        if (sameSlot(
+                request.sourceWeekStartDate(),
+                request.sourceDayIndex(),
+                request.sourceMealType(),
+                request.destinationWeekStartDate(),
+                request.destinationDayIndex(),
+                request.destinationMealType()
+        )) {
+            return getBoard(request.destinationWeekStartDate(), family);
+        }
         MealSlot destination = getOrCreateSlot(
                 family,
                 request.destinationWeekStartDate(),

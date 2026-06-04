@@ -41,6 +41,7 @@ import static com.familyhub.demo.TestDataFactory.createRecipe;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -439,6 +440,34 @@ class MealServiceTest {
                 MealType.DINNER,
                 MealCollisionMode.REPLACE_PRIMARY
         ), otherFamily)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void duplicateSlot_sameSlotIsNoOp() {
+        MealSlot source = mealSlot(1, MealType.DINNER, "Source Primary", List.of("Source Side"), "Source note");
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.of(source));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of(source));
+
+        MealBoardResponse board = mealService.duplicateSlot(new DuplicateMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                MealCollisionMode.ADD_AS_EXTRA
+        ), family);
+
+        assertThat(board.days().get(1).slots().get(2).primary().title()).isEqualTo("Source Primary");
+        assertThat(board.days().get(1).slots().get(2).extras()).extracting(MealSlotEntryResponse::title)
+                .containsExactly("Source Side");
+        verify(mealSlotRepository, never()).saveAndFlush(any(MealSlot.class));
     }
 
     @Test
