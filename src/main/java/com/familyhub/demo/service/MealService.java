@@ -49,7 +49,10 @@ public class MealService {
                 weekStartDate
         );
         Map<SlotKey, MealSlot> slotsByKey = slots.stream()
-                .collect(Collectors.toMap(slot -> new SlotKey(slot.getDayIndex(), slot.getMealType()), Function.identity()));
+                .collect(Collectors.toMap(
+                        slot -> new SlotKey(slot.getDayIndex(), slot.getMealType()),
+                        Function.identity(),
+                        (existing, duplicate) -> existing));
 
         List<MealDayResponse> days = new ArrayList<>();
         for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
