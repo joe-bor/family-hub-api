@@ -115,10 +115,9 @@ public class MealService {
         List<MealSlotEntry> movingEntries = copyEntries(source, destination);
 
         applyCopiedBlock(destination, movingEntries, source.getNote(), request.collisionMode());
-        clearSlot(source);
 
         mealSlotRepository.saveAndFlush(destination);
-        mealSlotRepository.saveAndFlush(source);
+        mealSlotRepository.delete(source);
         return getBoard(request.destinationWeekStartDate(), family);
     }
 
@@ -302,11 +301,6 @@ public class MealService {
         copy.setImageUrlSnapshot(source.getImageUrlSnapshot());
         copy.setNoteSnapshot(source.getNoteSnapshot());
         return copy;
-    }
-
-    private void clearSlot(MealSlot slot) {
-        slot.getEntries().clear();
-        slot.setNote(null);
     }
 
     private MealSlotEntry snapshotEntry(MealEntryRequest request, MealSlot slot, MealSlotRole role, int sortOrder) {
