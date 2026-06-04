@@ -557,6 +557,164 @@ class MealServiceTest {
         assertThat(response.extras()).extracting(MealSlotEntryResponse::title).containsExactly("Salad");
     }
 
+    @Test
+    void getBoard_nonSundayWeekStartThrowsBadRequest() {
+        assertThatThrownBy(() -> mealService.getBoard(WEEK_START.plusDays(1), family))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void upsertSlot_recipeWithoutRecipeIdThrowsBadRequest() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                0,
+                MealType.LUNCH
+        )).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.upsertSlot(new UpsertMealSlotRequest(
+                WEEK_START,
+                0,
+                MealType.LUNCH,
+                new MealEntryRequest(MealEntrySourceType.RECIPE, null, null, null, null),
+                List.of(),
+                null,
+                null
+        ), family)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void upsertSlot_quickMealWithoutTitleThrowsBadRequest() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                0,
+                MealType.LUNCH
+        )).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.upsertSlot(new UpsertMealSlotRequest(
+                WEEK_START,
+                0,
+                MealType.LUNCH,
+                new MealEntryRequest(MealEntrySourceType.QUICK, null, null, null, null),
+                List.of(),
+                null,
+                null
+        ), family)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void upsertSlot_quickMealTitleTooLongThrowsBadRequest() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                0,
+                MealType.LUNCH
+        )).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.upsertSlot(new UpsertMealSlotRequest(
+                WEEK_START,
+                0,
+                MealType.LUNCH,
+                new MealEntryRequest(MealEntrySourceType.QUICK, null, "a".repeat(161), null, null),
+                List.of(),
+                null,
+                null
+        ), family)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void upsertSlot_quickMealInvalidImageUrlThrowsBadRequest() {
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                0,
+                MealType.LUNCH
+        )).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.upsertSlot(new UpsertMealSlotRequest(
+                WEEK_START,
+                0,
+                MealType.LUNCH,
+                new MealEntryRequest(MealEntrySourceType.QUICK, null, "Soup", "not-a-url", null),
+                List.of(),
+                null,
+                null
+        ), family)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void moveSlot_acrossWeeksMovesBlockAndDeletesSource() {
+        LocalDate nextWeek = WEEK_START.plusWeeks(1);
+        MealSlot source = mealSlot(1, MealType.DINNER, "Source Primary", List.of(), null);
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.of(source));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                nextWeek,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.empty());
+        when(mealSlotRepository.saveAndFlush(any(MealSlot.class))).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, nextWeek))
+                .thenReturn(List.of(mealSlot(1, MealType.DINNER, "Source Primary", List.of(), null)));
+
+        MealBoardResponse board = mealService.moveSlot(new MoveMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                nextWeek,
+                1,
+                MealType.DINNER,
+                MealCollisionMode.REPLACE_PRIMARY
+        ), family);
+
+        assertThat(board.weekStartDate()).isEqualTo(nextWeek);
+        assertThat(board.days().get(1).slots().get(2).primary().title()).isEqualTo("Source Primary");
+        verify(mealSlotRepository).delete(source);
+    }
+
+    @Test
+    void duplicateSlot_acrossWeeksCopiesBlockAndKeepsSource() {
+        LocalDate nextWeek = WEEK_START.plusWeeks(1);
+        MealSlot source = mealSlot(1, MealType.DINNER, "Source Primary", List.of("Source Side"), "Source note");
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                WEEK_START,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.of(source));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateAndDayIndexAndMealType(
+                family,
+                nextWeek,
+                1,
+                MealType.DINNER
+        )).thenReturn(Optional.empty());
+        when(mealSlotRepository.saveAndFlush(any(MealSlot.class))).thenAnswer(invocation -> savedSlot(invocation.getArgument(0)));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, nextWeek))
+                .thenReturn(List.of(mealSlot(1, MealType.DINNER, "Source Primary", List.of("Source Side"), "Source note")));
+
+        MealBoardResponse board = mealService.duplicateSlot(new DuplicateMealSlotRequest(
+                WEEK_START,
+                1,
+                MealType.DINNER,
+                nextWeek,
+                1,
+                MealType.DINNER,
+                MealCollisionMode.REPLACE_PRIMARY
+        ), family);
+
+        assertThat(board.weekStartDate()).isEqualTo(nextWeek);
+        assertThat(board.days().get(1).slots().get(2).primary().title()).isEqualTo("Source Primary");
+        assertThat(board.days().get(1).slots().get(2).extras()).extracting(MealSlotEntryResponse::title)
+                .containsExactly("Source Side");
+        verify(mealSlotRepository, never()).delete(any(MealSlot.class));
+    }
+
     private MealEntryRequest quickMeal(String title) {
         return new MealEntryRequest(MealEntrySourceType.QUICK, null, title, null, null);
     }
