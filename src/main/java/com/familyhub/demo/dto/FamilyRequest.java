@@ -9,5 +9,7 @@ public record FamilyRequest(
 
         @Size(min = 3, max = 20, message = "Username must be between 3 and 20 characters")
         @Pattern(regexp = "^[a-z0-9_]+$", message = "Username can only contain lowercase letters, numbers, and underscores")
-        String username
+        String username,
+
+        String timezone
 ) {}

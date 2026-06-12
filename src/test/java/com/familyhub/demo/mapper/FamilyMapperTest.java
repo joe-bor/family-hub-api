@@ -26,4 +26,26 @@ class FamilyMapperTest {
         assertThat(response.members()).hasSize(1);
         assertThat(response.members().getFirst().name()).isEqualTo("Test Member");
     }
+
+    @Test
+    void toDto_includesStoredTimezone() {
+        Family family = createFamily();
+        family.setFamilyMembers(List.of());
+        family.setTimezone("Asia/Tokyo");
+
+        FamilyResponse response = FamilyMapper.toDto(family);
+
+        assertThat(response.timezone()).isEqualTo("Asia/Tokyo");
+    }
+
+    @Test
+    void toDto_invalidStoredTimezone_resolvesToDefault() {
+        Family family = createFamily();
+        family.setFamilyMembers(List.of());
+        family.setTimezone("Not/AZone");
+
+        FamilyResponse response = FamilyMapper.toDto(family);
+
+        assertThat(response.timezone()).isEqualTo("America/Los_Angeles");
+    }
 }

@@ -42,6 +42,10 @@ public class FamilyService {
             toBeUpdated.setUsername(family.username());
         }
 
+        if (family.timezone() != null) {
+            toBeUpdated.setTimezone(FamilyTimezoneResolver.normalizeRequestedTimezone(family.timezone()));
+        }
+
         return FamilyMapper.toDto(familyRepository.save(toBeUpdated));
     }
 

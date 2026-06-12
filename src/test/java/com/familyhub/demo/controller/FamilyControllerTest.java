@@ -48,6 +48,7 @@ class FamilyControllerTest {
         return new FamilyResponse(
                 FAMILY_ID,
                 "Test Family",
+                "America/Los_Angeles",
                 List.of(new FamilyMemberResponse(
                         MEMBER_ID,
                         "Mom", FamilyColor.CORAL, "mom@test.com", null
