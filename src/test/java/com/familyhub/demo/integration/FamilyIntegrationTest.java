@@ -143,6 +143,30 @@ class FamilyIntegrationTest {
     }
 
     @Test
+    void updateFamily_invalidTimezoneWithOtherFields_persistsNothing() throws Exception {
+        String body = register(registerJson(uniqueUsername(), "America/New_York"));
+        String token = JsonPath.read(body, "$.data.token");
+
+        // Name is applied to the managed entity before timezone validation
+        // throws, so this pins the transactional rollback: neither field
+        // may survive a request rejected for an invalid timezone
+        mockMvc.perform(put("/api/family")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "name": "Should Not Persist", "timezone": "Mars/Olympus" }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Timezone must be a valid IANA timezone."));
+
+        mockMvc.perform(get("/api/family")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Timezone Family"))
+                .andExpect(jsonPath("$.data.timezone").value("America/New_York"));
+    }
+
+    @Test
     void updateFamily_omittedTimezone_leavesStoredValueUnchanged() throws Exception {
         String body = register(registerJson(uniqueUsername(), "America/New_York"));
         String token = JsonPath.read(body, "$.data.token");
