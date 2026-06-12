@@ -37,7 +37,7 @@ public class AuthService {
         family.setName(registerRequest.familyName());
         family.setUsername(registerRequest.username());
         family.setPasswordHash(passwordEncoder.encode(registerRequest.password()));
-        family.setTimezone(FamilyTimezoneResolver.normalizeRegistrationTimezone(registerRequest.timezone()));
+        family.setTimezone(FamilyTimezoneResolver.normalizeRequestedTimezone(registerRequest.timezone()));
         family.setFamilyMembers(
                 registerRequest.members().stream()
                         .map(request -> FamilyMemberMapper.toEntity(request, family))

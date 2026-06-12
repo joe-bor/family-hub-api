@@ -5,14 +5,14 @@ import com.familyhub.demo.exception.BadRequestException;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 
-final class FamilyTimezoneResolver {
+public final class FamilyTimezoneResolver {
     static final String DEFAULT_FAMILY_TIMEZONE = "America/Los_Angeles";
     static final String INVALID_TIMEZONE_MESSAGE = "Timezone must be a valid IANA timezone.";
 
     private FamilyTimezoneResolver() {
     }
 
-    static String normalizeRegistrationTimezone(String timezone) {
+    static String normalizeRequestedTimezone(String timezone) {
         String candidate = normalize(timezone);
         if (candidate == null) {
             return DEFAULT_FAMILY_TIMEZONE;
@@ -25,7 +25,7 @@ final class FamilyTimezoneResolver {
         }
     }
 
-    static String resolveStoredTimezoneOrDefault(String timezone) {
+    public static String resolveStoredTimezoneOrDefault(String timezone) {
         String candidate = normalize(timezone);
         if (candidate == null) {
             return DEFAULT_FAMILY_TIMEZONE;

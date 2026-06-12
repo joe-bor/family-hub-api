@@ -184,13 +184,14 @@ public final class TestDataFactory {
     }
 
     public static FamilyRequest createFamilyRequest() {
-        return new FamilyRequest("Updated Family", "testfamily");
+        return new FamilyRequest("Updated Family", "testfamily", null);
     }
 
     public static FamilyResponse createFamilyResponse(Family family) {
         return new FamilyResponse(
                 family.getId(),
                 family.getName(),
+                family.getTimezone(),
                 family.getFamilyMembers() != null
                         ? family.getFamilyMembers().stream()
                         .map(m -> new FamilyMemberResponse(
