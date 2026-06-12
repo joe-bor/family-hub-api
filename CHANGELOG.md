@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0](https://github.com/joe-bor/family-hub-api/compare/v1.5.0...v1.6.0) (2026-06-12)
+
+
+### Features
+
+* **family:** expose and allow updating family timezone ([c4469a9](https://github.com/joe-bor/family-hub-api/commit/c4469a9fc8eb9557426ed356f037f0a056d94758))
+
+
+### Tests
+
+* **family:** cover invalid timezone combined with other fields ([68adfce](https://github.com/joe-bor/family-hub-api/commit/68adfce88436a67950e4e133c561979ca6a99cd1))
+
 ## [1.5.0](https://github.com/joe-bor/family-hub-api/compare/v1.4.1...v1.5.0) (2026-06-04)
 
 
