@@ -25,14 +25,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.familyhub.demo.TestDataFactory.FAMILY_ID;
-import static com.familyhub.demo.TestDataFactory.LIST_CATEGORY_ID;
 import static com.familyhub.demo.TestDataFactory.createFamily;
-import static com.familyhub.demo.TestDataFactory.createListCategory;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -291,9 +288,10 @@ class ListCategoryServiceTest {
 
         CategoryDeleteResult result = listCategoryService.delete(CAT_A_ID, family);
 
-        // Verify ordering: scope lock → clearCategory → delete → load remaining → flatten
+        // Verify ordering: scope lock → refetch → clearCategory → delete → load remaining → flatten
         InOrder order = inOrder(scopeRepository, itemRepository, categoryRepository, listRepository);
         order.verify(scopeRepository).lockByFamilyAndCategoryId(family, CAT_A_ID);
+        order.verify(categoryRepository).findByFamilyAndId(family, CAT_A_ID);
         order.verify(itemRepository).clearCategory(FAMILY_ID, ListKind.GROCERY, CAT_A_ID);
         order.verify(categoryRepository).delete(produce);
         order.verify(categoryRepository).flush();
@@ -380,6 +378,25 @@ class ListCategoryServiceTest {
         assertThatThrownBy(() -> listCategoryService.reorder(request, family))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("changed");
+    }
+
+    @Test
+    void reorder_staleBaselineAndInvalidMembership_throwsConflictNotBadRequest() {
+        // Both the baseline is stale AND the membership is invalid (duplicate).
+        // Proves the 409 stale-baseline check runs BEFORE the 400 membership check:
+        // if membership ran first, the duplicate [A, A] would throw BadRequestException.
+        when(scopeRepository.lockByFamilyAndKind(family, ListKind.GROCERY)).thenReturn(Optional.of(scope));
+        when(categoryRepository.findByFamilyAndKindOrderBySortOrderAsc(family, ListKind.GROCERY))
+                .thenReturn(List.of(produce, dairy));
+
+        ReorderListCategoriesRequest request = new ReorderListCategoriesRequest(
+                ListKind.GROCERY,
+                List.of(CAT_B_ID, CAT_A_ID),   // stale: does not match current [A, B]
+                List.of(CAT_A_ID, CAT_A_ID)    // invalid membership: duplicate
+        );
+
+        assertThatThrownBy(() -> listCategoryService.reorder(request, family))
+                .isInstanceOf(ConflictException.class);
     }
 
     @Test
