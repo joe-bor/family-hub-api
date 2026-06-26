@@ -39,8 +39,7 @@ public class ListService {
         ListKind kind = request.kind();
 
         // Acquire scope lock BEFORE constructing/persisting the aggregate
-        scopeRepository.lockByFamilyAndKind(family, kind)
-                .orElseThrow(() -> new IllegalStateException("List category catalog scope is missing for kind: " + kind));
+        lockScope(family, kind);
 
         // Choose display mode: GENERAL → FLAT; GROCERY/TODO → GROUPED iff catalog non-empty, else FLAT
         ListCategoryDisplayMode displayMode;
@@ -74,8 +73,7 @@ public class ListService {
                     .orElseThrow(() -> new ResourceNotFoundException("List", id));
 
             // Acquire scope lock
-            scopeRepository.lockByFamilyAndKind(family, kind)
-                    .orElseThrow(() -> new IllegalStateException("List category catalog scope is missing for kind: " + kind));
+            lockScope(family, kind);
 
             // Verify catalog is non-empty (post-lock authoritative check)
             if (listCategoryRepository.countByFamilyAndKind(family, kind) == 0) {
@@ -98,39 +96,23 @@ public class ListService {
 
     @Transactional
     public ListItemResponse createItem(UUID listId, CreateListItemRequest request, Family family) {
+        // When a category is requested, route-and-lock the scope BEFORE loading the aggregate:
+        // read the immutable kind projection first, then lock, then load. This keeps Hibernate
+        // autoflush from grabbing item/list locks ahead of the scope lock.
         if (request.categoryId() != null) {
-            // Read immutable kind BEFORE acquiring any entity lock
             ListKind kind = sharedListRepository.findKindByFamilyAndId(family, listId)
                     .orElseThrow(() -> new ResourceNotFoundException("List", listId));
-
-            // Acquire scope lock
-            scopeRepository.lockByFamilyAndKind(family, kind)
-                    .orElseThrow(() -> new IllegalStateException("List category catalog scope is missing for kind: " + kind));
-
-            // Load aggregate and resolve category AFTER lock
-            SharedList list = getListOrThrow(listId, family);
-            ListCategory category = resolveCategory(list, request.categoryId());
-
-            SharedListItem item = new SharedListItem();
-            item.setList(list);
-            item.setText(request.text().trim());
-            item.setCompleted(false);
-            item.setCompletedAt(null);
-            item.setCategory(category);
-            list.getItems().add(item);
-
-            SharedList saved = sharedListRepository.saveAndFlush(list);
-            return ListMapper.toItemDto(saved.getItems().getLast());
+            lockScope(family, kind);
         }
 
-        // No category: ordinary path, no lock
         SharedList list = getListOrThrow(listId, family);
+
         SharedListItem item = new SharedListItem();
         item.setList(list);
         item.setText(request.text().trim());
         item.setCompleted(false);
         item.setCompletedAt(null);
-        item.setCategory(null);
+        item.setCategory(resolveCategory(list, request.categoryId()));
         list.getItems().add(item);
 
         SharedList saved = sharedListRepository.saveAndFlush(list);
@@ -139,56 +121,23 @@ public class ListService {
 
     @Transactional
     public ListItemResponse updateItem(UUID listId, UUID itemId, UpdateListItemRequest request, Family family) {
+        // When a category is requested, route-and-lock the scope BEFORE loading the aggregate
+        // (immutable-kind projection first, then lock, then load), matching createItem's ordering.
         if (request.categoryId() != null) {
-            // Read immutable kind BEFORE acquiring any entity lock
             ListKind kind = sharedListRepository.findKindByFamilyAndId(family, listId)
                     .orElseThrow(() -> new ResourceNotFoundException("List", listId));
-
-            // Acquire scope lock
-            scopeRepository.lockByFamilyAndKind(family, kind)
-                    .orElseThrow(() -> new IllegalStateException("List category catalog scope is missing for kind: " + kind));
-
-            // Load aggregate and item AFTER lock
-            SharedList list = getListOrThrow(listId, family);
-            SharedListItem item = list.getItems().stream()
-                    .filter(candidate -> candidate.getId().equals(itemId))
-                    .findFirst()
-                    .orElseThrow(() -> new ResourceNotFoundException("List Item", itemId));
-
-            item.setText(request.text().trim());
-            boolean completed = Boolean.TRUE.equals(request.completed());
-            item.setCompleted(completed);
-            if (completed) {
-                if (item.getCompletedAt() == null) {
-                    item.setCompletedAt(LocalDateTime.now());
-                }
-            } else {
-                item.setCompletedAt(null);
-            }
-            item.setCategory(resolveCategory(list, request.categoryId()));
-
-            sharedListRepository.saveAndFlush(list);
-            return ListMapper.toItemDto(item);
+            lockScope(family, kind);
         }
 
-        // No category: ordinary path, no lock
         SharedList list = getListOrThrow(listId, family);
         SharedListItem item = list.getItems().stream()
                 .filter(candidate -> candidate.getId().equals(itemId))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("List Item", itemId));
 
-        item.setText(request.text().trim());
-        boolean completed = Boolean.TRUE.equals(request.completed());
-        item.setCompleted(completed);
-        if (completed) {
-            if (item.getCompletedAt() == null) {
-                item.setCompletedAt(LocalDateTime.now());
-            }
-        } else {
-            item.setCompletedAt(null);
-        }
-        item.setCategory(null);
+        applyItemMutation(item, request);
+        // PATCH-replace semantics: a null categoryId clears the assignment (selects "Uncategorized").
+        item.setCategory(resolveCategory(list, request.categoryId()));
 
         sharedListRepository.saveAndFlush(list);
         return ListMapper.toItemDto(item);
@@ -226,6 +175,24 @@ public class ListService {
                 .orElseThrow(() -> new ResourceNotFoundException("List Preferences", family.getId()));
         preferences.setShowCompletedByDefault(request.showCompletedByDefault());
         return new ListPreferencesResponse(listPreferencesRepository.saveAndFlush(preferences).isShowCompletedByDefault());
+    }
+
+    private ListCategoryCatalogScope lockScope(Family family, ListKind kind) {
+        return scopeRepository.lockByFamilyAndKind(family, kind)
+                .orElseThrow(() -> new IllegalStateException("List category catalog scope is missing"));
+    }
+
+    private void applyItemMutation(SharedListItem item, UpdateListItemRequest request) {
+        item.setText(request.text().trim());
+        boolean completed = Boolean.TRUE.equals(request.completed());
+        item.setCompleted(completed);
+        if (completed) {
+            if (item.getCompletedAt() == null) {
+                item.setCompletedAt(LocalDateTime.now());
+            }
+        } else {
+            item.setCompletedAt(null);
+        }
     }
 
     private ListCategory resolveCategory(SharedList list, UUID categoryId) {

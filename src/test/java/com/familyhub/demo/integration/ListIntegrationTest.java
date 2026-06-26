@@ -652,4 +652,133 @@ class ListIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].categoryId").value(nullValue()));
     }
+
+    // -------------------------------------------------------------------------
+    // Display-mode stability: creating/recreating a category must NOT change
+    // existing lists' display modes (spec invariants D5/D6).
+    // -------------------------------------------------------------------------
+
+    @Test
+    void creatingFirstCategory_doesNotRegroupExistingList() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndGetToken(username);
+        Family family = familyRepository.findByUsername(username).orElseThrow();
+
+        // Create a General list — it starts FLAT (no General categories exist)
+        String listBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Notes", "kind": "general"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.categoryDisplayMode").value("flat"))
+                .andReturn().getResponse().getContentAsString();
+        String listId = JsonPath.read(listBody, "$.data.id");
+
+        // Create the FIRST General category
+        listCategoryService.create(new CreateListCategoryRequest(ListKind.GENERAL, "Documents"), family);
+
+        // Existing list must STILL be flat — creating a category does not auto-group existing lists
+        mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryDisplayMode").value("flat"));
+    }
+
+    @Test
+    void recreatingCategory_doesNotRegroupExistingFlattenedList() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndGetToken(username);
+        Family family = familyRepository.findByUsername(username).orElseThrow();
+
+        // Grocery list is GROUPED after registration (seeded grocery categories exist)
+        String listBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Groceries", "kind": "grocery"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.categoryDisplayMode").value("grouped"))
+                .andReturn().getResponse().getContentAsString();
+        String listId = JsonPath.read(listBody, "$.data.id");
+
+        // Delete EVERY grocery category; the final delete flattens grouped lists
+        var grocery = listCategoryRepository.findByFamilyAndKindOrderBySortOrderAsc(family, ListKind.GROCERY);
+        for (var cat : grocery) {
+            listCategoryService.delete(cat.getId(), family);
+        }
+
+        // List is now flat
+        mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryDisplayMode").value("flat"));
+
+        // Recreate a grocery category
+        listCategoryService.create(new CreateListCategoryRequest(ListKind.GROCERY, "Produce"), family);
+
+        // The previously-flattened list must STILL be flat — recreating does not regroup it
+        mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryDisplayMode").value("flat"));
+    }
+
+    // -------------------------------------------------------------------------
+    // updateItem with null categoryId clears an existing assignment
+    // (PATCH-replace semantics: null selects "Uncategorized").
+    // -------------------------------------------------------------------------
+
+    @Test
+    void updateItem_nullCategoryId_clearsExistingCategory() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndGetToken(username);
+
+        // Grocery list with seeded categories
+        String listBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Groceries", "kind": "grocery"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String listId = JsonPath.read(listBody, "$.data.id");
+
+        String detailBody = mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String produceCategoryId = JsonPath.read(detailBody, "$.data.categories[0].id");
+
+        // Create an item WITH a category
+        String itemBody = mockMvc.perform(post("/api/lists/{id}/items", listId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Bananas", "categoryId": "%s"}
+                                """.formatted(produceCategoryId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.categoryId").value(produceCategoryId))
+                .andReturn().getResponse().getContentAsString();
+        String itemId = JsonPath.read(itemBody, "$.data.id");
+
+        // PATCH the item with categoryId: null → clears the assignment
+        mockMvc.perform(patch("/api/lists/{listId}/items/{itemId}", listId, itemId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Bananas", "completed": false, "categoryId": null}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryId").value(nullValue()));
+
+        // Persisted item now has a null category
+        mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].categoryId").value(nullValue()));
+    }
 }
