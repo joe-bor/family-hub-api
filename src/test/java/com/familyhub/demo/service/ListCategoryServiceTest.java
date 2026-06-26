@@ -77,7 +77,6 @@ class ListCategoryServiceTest {
         produce.setKind(ListKind.GROCERY);
         produce.setName("Produce");
         produce.setSortOrder(0);
-        produce.setSeeded(false);
 
         dairy = new ListCategory();
         dairy.setId(CAT_B_ID);
@@ -85,7 +84,6 @@ class ListCategoryServiceTest {
         dairy.setKind(ListKind.GROCERY);
         dairy.setName("Dairy");
         dairy.setSortOrder(1);
-        dairy.setSeeded(false);
     }
 
     // -------------------------------------------------------------------------
@@ -558,7 +556,6 @@ class ListCategoryServiceTest {
         cat.setKind(kind);
         cat.setName(name);
         cat.setSortOrder(sortOrder);
-        cat.setSeeded(false);
         return cat;
     }
 

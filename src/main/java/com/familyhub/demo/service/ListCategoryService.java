@@ -59,7 +59,6 @@ public class ListCategoryService {
         category.setKind(request.kind());
         category.setName(name);
         category.setSortOrder(sortOrder);
-        // seeded defaults to false (user-created categories are not starters)
 
         ListCategory saved = categoryRepository.saveAndFlush(category);
         return new ListCategoryManagementEntry(saved.getId(), request.kind(), name, sortOrder, 0L);
