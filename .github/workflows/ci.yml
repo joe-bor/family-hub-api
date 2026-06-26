@@ -22,6 +22,9 @@ jobs:
           java-version: 21
           cache: maven
 
+      - name: Test release version resolver
+        run: bash scripts/resolve-release-version.test.sh
+
       - name: Build and test
         run: ./mvnw verify
         env:
