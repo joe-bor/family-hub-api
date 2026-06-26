@@ -220,4 +220,63 @@ class ListCategoriesMigrationTest {
             conn.rollback();
         }
     }
+
+    // ---------------------------------------------------------------------------
+    // Test 3: V17 guard aborts the migration when a pre-existing database already holds
+    //         rows that collide under the new normalized lower(btrim(name)) key.
+    //         V16's case-sensitive uniqueness lets such rows coexist; V17 must refuse
+    //         to swap the constraint and instead RAISE EXCEPTION ('... duplicates exist').
+    // ---------------------------------------------------------------------------
+    @Test
+    void v17_aborts_whenPreExistingNormalizedDuplicatesExist() throws SQLException {
+        String schema = "guard_" + UUID.randomUUID().toString().replace("-", "");
+
+        // Migrate to V16 only — its uniqueness is case/whitespace-sensitive.
+        flyway(schema, "16").migrate();
+
+        String familyId = UUID.randomUUID().toString();
+
+        try (Connection conn = connect(schema)) {
+            conn.setAutoCommit(false);
+
+            conn.createStatement().execute(
+                    "INSERT INTO family (id, name, username, password_hash) VALUES " +
+                    "('" + familyId + "', 'Dup Family', 'dupfamily', 'hash')");
+
+            // Two GROCERY categories that are DISTINCT strings ('Produce' vs 'produce')
+            // but collide under lower(btrim(name)). V16's uk_list_category_family_kind_name
+            // is case-sensitive, so both inserts succeed here.
+            conn.createStatement().execute(
+                    "INSERT INTO list_category (id, family_id, kind, name, seeded, sort_order) VALUES " +
+                    "(gen_random_uuid(), '" + familyId + "', 'GROCERY', 'Produce', true, 0)");
+            conn.createStatement().execute(
+                    "INSERT INTO list_category (id, family_id, kind, name, seeded, sort_order) VALUES " +
+                    "(gen_random_uuid(), '" + familyId + "', 'GROCERY', 'produce', true, 1)");
+
+            conn.commit();
+
+            // Both rows really are present under V16.
+            ResultSet countRs = conn.createStatement().executeQuery(
+                    "SELECT count(*) FROM list_category WHERE family_id = '" + familyId + "'");
+            countRs.next();
+            assertThat(countRs.getLong(1))
+                    .as("V16 case-sensitive uniqueness should allow 'Produce' and 'produce' to coexist")
+                    .isEqualTo(2);
+        }
+
+        // Migrating to latest must abort: the V17 DO-block guard raises before the
+        // constraint swap. Flyway wraps the PostgreSQL error, so walk the message text.
+        assertThatThrownBy(() -> flyway(schema, "latest").migrate())
+                .as("V17 must abort the migration when pre-existing normalized duplicates exist")
+                .hasStackTraceContaining("duplicates exist");
+
+        // The migration aborted inside V17's transaction, so the scope table was never created.
+        try (Connection conn = connect(schema)) {
+            ResultSet tableRs = conn.getMetaData().getTables(
+                    null, schema, "list_category_catalog_scope", null);
+            assertThat(tableRs.next())
+                    .as("aborted V17 migration must not have created list_category_catalog_scope")
+                    .isFalse();
+        }
+    }
 }
