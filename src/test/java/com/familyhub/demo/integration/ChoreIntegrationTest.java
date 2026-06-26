@@ -81,6 +81,10 @@ class ChoreIntegrationTest {
         jdbcTemplate.update("DELETE FROM chore_period_completion");
         jdbcTemplate.update("DELETE FROM chore_template");
         jdbcTemplate.update("DELETE FROM family_member");
+        // Other integration tests share this Testcontainer and can leave list items that
+        // reference list_category via a NO ACTION composite FK (fk_shared_list_item_category).
+        // The family cascade can't resolve that reference, so clear the items before wiping families.
+        jdbcTemplate.update("DELETE FROM shared_list_item");
         jdbcTemplate.update("DELETE FROM family");
 
         jdbcTemplate.update(
