@@ -7,12 +7,14 @@ COMPOSE_DIR="/opt/familyhub"
 COMPOSE_FILE="docker-compose.prod.yml"
 SERVICE="api"
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "Fetching latest release version..."
-BE_VERSION=$(curl -sf "https://api.github.com/repos/${REPO}/releases/latest" | jq -r '.tag_name // empty' | sed 's/^v//')
+BE_VERSION="$(bash "$SCRIPT_DIR/resolve-release-version.sh")" || BE_VERSION=""
 
 if [ -z "$BE_VERSION" ]; then
-  echo "No release found — falling back to 'latest'"
-  BE_VERSION="latest"
+  echo "No published backend release could be resolved; refusing to deploy." >&2
+  exit 1
 fi
 
 echo "Deploying version: ${BE_VERSION}"
