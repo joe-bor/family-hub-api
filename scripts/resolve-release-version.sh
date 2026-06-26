@@ -30,6 +30,8 @@ resolve_release_version() {
   local bare="${tag#v}"
 
   # Accept ONLY numeric MAJOR.MINOR.PATCH — no pre-release suffixes, no extra dots.
+  # This case is just a fast shape pre-filter; the IFS split and per-component
+  # digit checks below do the real enforcement.
   case "$bare" in
     [0-9]*.[0-9]*.[0-9]*)
       # Further validate: all three components must be purely numeric.
@@ -57,6 +59,7 @@ resolve_release_version() {
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   set -euo pipefail
 
+  # REPO can be overridden via env to target a different repository.
   REPO="${REPO:-joe-bor/family-hub-api}"
 
   release_json="$(curl -sf "https://api.github.com/repos/${REPO}/releases/latest")"
