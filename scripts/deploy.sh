@@ -10,6 +10,9 @@ SERVICE="api"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Fetching latest release version..."
+# The `|| BE_VERSION=""` is required: a failed command substitution does not
+# reliably trigger `set -e`, so we catch the failure here and let the `-z`
+# guard below fail closed.
 BE_VERSION="$(bash "$SCRIPT_DIR/resolve-release-version.sh")" || BE_VERSION=""
 
 if [ -z "$BE_VERSION" ]; then
