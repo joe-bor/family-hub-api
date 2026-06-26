@@ -31,9 +31,6 @@ public class ListCategory {
     private String name;
 
     @Column(nullable = false)
-    private boolean seeded;
-
-    @Column(nullable = false)
     private int sortOrder;
 
     @CreationTimestamp

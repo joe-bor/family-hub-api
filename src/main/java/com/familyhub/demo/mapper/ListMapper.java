@@ -1,6 +1,6 @@
 package com.familyhub.demo.mapper;
 
-import com.familyhub.demo.dto.ListCategoryResponse;
+import com.familyhub.demo.dto.ListCategoryOption;
 import com.familyhub.demo.dto.ListDetailResponse;
 import com.familyhub.demo.dto.ListItemResponse;
 import com.familyhub.demo.dto.ListSummaryResponse;
@@ -25,12 +25,11 @@ public final class ListMapper {
         );
     }
 
-    public static ListCategoryResponse toCategoryDto(ListCategory category) {
-        return new ListCategoryResponse(
+    public static ListCategoryOption toCategoryDto(ListCategory category) {
+        return new ListCategoryOption(
                 category.getId(),
                 category.getKind(),
                 category.getName(),
-                category.isSeeded(),
                 category.getSortOrder()
         );
     }
@@ -47,7 +46,7 @@ public final class ListMapper {
         );
     }
 
-    public static ListDetailResponse toDetailDto(SharedList list, List<ListCategoryResponse> categories) {
+    public static ListDetailResponse toDetailDto(SharedList list, List<ListCategoryOption> categories) {
         return new ListDetailResponse(
                 list.getId(),
                 list.getName(),

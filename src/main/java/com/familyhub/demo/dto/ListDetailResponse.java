@@ -13,7 +13,7 @@ public record ListDetailResponse(
         ListKind kind,
         ListCategoryDisplayMode categoryDisplayMode,
         Boolean showCompletedOverride,
-        List<ListCategoryResponse> categories,
+        List<ListCategoryOption> categories,
         List<ListItemResponse> items,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

@@ -33,6 +33,9 @@ public interface SharedListRepository extends JpaRepository<SharedList, UUID> {
             """)
     Optional<SharedList> findDetailByFamilyAndId(@Param("family") Family family, @Param("id") UUID id);
 
+    @Query("select l.kind from SharedList l where l.family = :family and l.id = :id")
+    Optional<ListKind> findKindByFamilyAndId(@Param("family") Family family, @Param("id") UUID id);
+
     @Query("""
             select count(list) from SharedList list
             where list.family = :family

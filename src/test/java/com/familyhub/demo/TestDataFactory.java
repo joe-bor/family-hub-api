@@ -283,7 +283,6 @@ public final class TestDataFactory {
         category.setFamily(family);
         category.setKind(kind);
         category.setName(name);
-        category.setSeeded(true);
         category.setSortOrder(sortOrder);
         category.setCreatedAt(LocalDateTime.of(2026, 5, 6, 9, 0));
         category.setUpdatedAt(LocalDateTime.of(2026, 5, 6, 9, 0));
@@ -365,12 +364,11 @@ public final class TestDataFactory {
         );
     }
 
-    public static ListCategoryResponse sampleListCategoryResponse() {
-        return new ListCategoryResponse(
+    public static ListCategoryOption sampleListCategoryOption() {
+        return new ListCategoryOption(
                 LIST_CATEGORY_ID,
                 ListKind.GROCERY,
                 "Produce",
-                true,
                 0
         );
     }
@@ -394,7 +392,7 @@ public final class TestDataFactory {
                 ListKind.GROCERY,
                 ListCategoryDisplayMode.GROUPED,
                 null,
-                List.of(sampleListCategoryResponse()),
+                List.of(sampleListCategoryOption()),
                 List.of(sampleListItemResponse()),
                 LocalDateTime.of(2026, 5, 6, 9, 0),
                 LocalDateTime.of(2026, 5, 6, 9, 0)
