@@ -35,7 +35,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -150,7 +149,6 @@ class ListCategoryIntegrationTest {
     void kindIsolation_groceryCategoryNotVisibleInGeneralCatalog() throws Exception {
         String username = uniqueUsername();
         String token = registerAndGetToken(username);
-        Family family = familyRepository.findByUsername(username).orElseThrow();
 
         // Family already has 5 Grocery categories from seeding
         // Fetch general catalog — should have 0 categories
@@ -170,9 +168,8 @@ class ListCategoryIntegrationTest {
     void kindIsolation_reorderWithForeignKindIds_returns400() throws Exception {
         String username = uniqueUsername();
         String token = registerAndGetToken(username);
-        Family family = familyRepository.findByUsername(username).orElseThrow();
 
-        // Get grocery categories (5 seeded)
+        // Get grocery categories (5 seeded) and to-do categories (3 seeded)
         String catalogBody = mockMvc.perform(get("/api/lists/categories").param("kind", "grocery")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -180,15 +177,16 @@ class ListCategoryIntegrationTest {
 
         List<String> groceryIds = JsonPath.read(catalogBody, "$.data.categories[*].id");
 
-        // Try to use grocery IDs in a to-do reorder — membership mismatch → conflict (stale baseline)
         String todoBody = mockMvc.perform(get("/api/lists/categories").param("kind", "to-do")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         List<String> todoIds = JsonPath.read(todoBody, "$.data.categories[*].id");
 
-        // Expected: todo IDs; target: grocery IDs → stale baseline (conflict) since expected doesn't match actual todo
-        // (actually membershipcheck: these are completely different — will get 409 stale baseline)
+        // VALID baseline: expectedCategoryIds == the real to-do catalog, so the stale-baseline (409)
+        // check passes. Then membership validation runs and rejects the foreign (grocery) target ids:
+        // grocery has 5 entries, to-do has 3, so the size differs → BadRequest("Invalid category order") → 400.
+        // No foreign existence is revealed — the rejection is purely a membership mismatch.
         mockMvc.perform(put("/api/lists/categories/order")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -200,6 +198,44 @@ class ListCategoryIntegrationTest {
                                 }
                                 """.formatted(toJsonArray(todoIds), toJsonArray(groceryIds))))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void reorder_validBaseline_foreignFamilyIdInTarget_returns400_withoutRevealingExistence() throws Exception {
+        String userA = uniqueUsername();
+        String userB = uniqueUsername();
+        String tokenA = registerAndGetToken(userA);
+        String tokenB = registerAndGetToken(userB);
+        Family familyA = familyRepository.findByUsername(userA).orElseThrow();
+        Family familyB = familyRepository.findByUsername(userB).orElseThrow();
+
+        // B has exactly ONE General category — a non-empty catalog so the baseline can match.
+        var catB = listCategoryService.create(new CreateListCategoryRequest(ListKind.GENERAL, "Mine"), familyB);
+
+        // A has a General category B must not be able to reference.
+        var catA = listCategoryService.create(new CreateListCategoryRequest(ListKind.GENERAL, "Secret"), familyA);
+
+        // VALID baseline for B: expectedCategoryIds == B's real catalog ([catB]). The stale-baseline (409)
+        // check therefore PASSES. The target is the SAME SIZE (1 element) but swaps in A's foreign id:
+        // membership validation finds the set {catA} != current set {catB} → BadRequest → 400.
+        // The 400 is identical whether catA exists or not, so foreign existence/ownership is never revealed.
+        mockMvc.perform(put("/api/lists/categories/order")
+                        .header("Authorization", "Bearer " + tokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "kind": "general",
+                                  "expectedCategoryIds": ["%s"],
+                                  "categoryIds": ["%s"]
+                                }
+                                """.formatted(catB.id(), catA.id())))
+                .andExpect(status().isBadRequest());
+
+        // B's own category is untouched (still sortOrder 0, still present).
+        var bCats = listCategoryRepository.findByFamilyAndKindOrderBySortOrderAsc(familyB, ListKind.GENERAL);
+        assertThat(bCats).hasSize(1);
+        assertThat(bCats.get(0).getId()).isEqualTo(catB.id());
+        assertThat(bCats.get(0).getSortOrder()).isEqualTo(0);
     }
 
     // -------------------------------------------------------------------------
@@ -354,6 +390,18 @@ class ListCategoryIntegrationTest {
                                 """))
                 .andExpect(status().isOk());
 
+        // Capture the EXACT catalog ordering before the failed delete. There are two GENERAL
+        // categories: "Rollback Target" (sortOrder 0, the delete target) and "Another" (sortOrder 1).
+        // A delete that partially applied before rolling back would have compacted "Another" from 1→0,
+        // so re-asserting these exact ids+sortOrders proves the ORDER rolled back, not just row existence.
+        String beforeBody = mockMvc.perform(get("/api/lists/categories").param("kind", "general")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> idsBefore = JsonPath.read(beforeBody, "$.data.categories[*].id");
+        List<Integer> sortOrdersBefore = JsonPath.read(beforeBody, "$.data.categories[*].sortOrder");
+        assertThat(sortOrdersBefore).containsExactly(0, 1);
+
         // Install a trigger that prevents DELETE on list_category
         jdbcTemplate.execute("""
                 CREATE OR REPLACE FUNCTION trg_block_category_delete()
@@ -390,13 +438,20 @@ class ListCategoryIntegrationTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.categoryDisplayMode").value("grouped"));
 
-            // sortOrder still intact
-            String catBody = mockMvc.perform(get("/api/lists/categories").param("kind", "general")
+            // sortOrder fully intact: the EXACT same ids in the EXACT same positions with the EXACT
+            // same sortOrder values as before the failed delete. "Rollback Target" is still at 0 and
+            // "Another" is still at 1 — proving order rolled back, not merely that the row survived.
+            String afterBody = mockMvc.perform(get("/api/lists/categories").param("kind", "general")
                             .header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk())
                     .andReturn().getResponse().getContentAsString();
-            List<String> catIds = JsonPath.read(catBody, "$.data.categories[*].id");
-            assertThat(catIds).contains(catId.toString());
+            List<String> idsAfter = JsonPath.read(afterBody, "$.data.categories[*].id");
+            List<Integer> sortOrdersAfter = JsonPath.read(afterBody, "$.data.categories[*].sortOrder");
+            assertThat(idsAfter).isEqualTo(idsBefore);
+            assertThat(sortOrdersAfter).isEqualTo(sortOrdersBefore);
+            assertThat(sortOrdersAfter).containsExactly(0, 1);
+            // The delete target specifically is still present at its original sortOrder 0.
+            assertThat(idsAfter.get(0)).isEqualTo(catId.toString());
 
         } finally {
             jdbcTemplate.execute("DROP TRIGGER IF EXISTS block_category_delete ON list_category");
@@ -610,20 +665,20 @@ class ListCategoryIntegrationTest {
     }
 
     @Test
-    void reorder_foreignFamilyIds_returns409OrBadRequest_doesNotRevealExistence() throws Exception {
+    void reorder_foreignFamilyBaseline_returns409_withoutRevealingExistence() throws Exception {
         String userA = uniqueUsername();
         String userB = uniqueUsername();
         String tokenA = registerAndGetToken(userA);
         String tokenB = registerAndGetToken(userB);
         Family familyA = familyRepository.findByUsername(userA).orElseThrow();
 
-        // A creates a category
+        // A creates a category that B must never be able to address.
         var catA = listCategoryService.create(new CreateListCategoryRequest(ListKind.GENERAL, "Secret"), familyA);
 
-        // B's GENERAL catalog is empty; B tries to reorder using A's category ID
-        // expected=[] (B's actual) but categories=[catA.id()] → conflict (stale baseline first)
-        // or if empty expected too → membership mismatch → but stale baseline happens first (409)
-        // B's actual catalog for GENERAL = [] (no categories). expectedCategoryIds=[catA.id()] → stale → 409
+        // B's GENERAL catalog is EMPTY, so its current ids = []. B sends expectedCategoryIds=[catA.id()].
+        // The stale-baseline check runs FIRST and unconditionally: currentIds([]) != expected([catA.id()])
+        // → ConflictException → 409, every time (deterministic; membership validation is never reached).
+        // The 409 is identical whether catA exists or not, so foreign existence/ownership is never revealed.
         mockMvc.perform(put("/api/lists/categories/order")
                         .header("Authorization", "Bearer " + tokenB)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -634,9 +689,7 @@ class ListCategoryIntegrationTest {
                                   "categoryIds": ["%s"]
                                 }
                                 """.formatted(catA.id(), catA.id())))
-                // Either 409 (stale baseline) or 400 (membership invalid) — both are fine,
-                // neither reveals the existence or owner of catA
-                .andExpect(status().is4xxClientError());
+                .andExpect(status().isConflict());
     }
 
     // -------------------------------------------------------------------------
@@ -730,7 +783,7 @@ class ListCategoryIntegrationTest {
     }
 
     @Test
-    void getCatalog_duplicateName_returns409() throws Exception {
+    void createCategory_duplicateName_returns409() throws Exception {
         String username = uniqueUsername();
         String token = registerAndGetToken(username);
 
