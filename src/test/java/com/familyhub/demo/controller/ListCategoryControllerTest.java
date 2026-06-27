@@ -163,6 +163,46 @@ class ListCategoryControllerTest {
 
     @Test
     @WithMockFamily
+    void createCategory_invalidKindInBody_returns400() throws Exception {
+        // An unknown kind in the request body fails Jackson enum binding (HttpMessageNotReadable),
+        // which must surface as 400 — not 500 via the generic handler.
+        mockMvc.perform(post("/api/lists/categories")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "kind": "banana",
+                                  "name": "Produce"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockFamily
+    void createCategory_nameWithinLimitAfterTrim_returns201() throws Exception {
+        given(listCategoryService.create(any(), any(Family.class))).willReturn(sampleManagementEntry());
+
+        // 100 visible chars wrapped in whitespace: 102 raw but 100 after trim, so it satisfies the
+        // "trimmed name at most 100 chars" contract and must not be rejected by @Size.
+        String paddedName = "  " + "A".repeat(100) + "  ";
+        mockMvc.perform(post("/api/lists/categories")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"grocery\",\"name\":\"" + paddedName + "\"}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockFamily
+    void createCategory_nameOver100AfterTrim_returns400() throws Exception {
+        String tooLong = "A".repeat(101);
+        mockMvc.perform(post("/api/lists/categories")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"grocery\",\"name\":\"" + tooLong + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockFamily
     void createCategory_conflictException_returns409() throws Exception {
         given(listCategoryService.create(any(), any(Family.class)))
                 .willThrow(new ConflictException("A category with this name already exists."));
@@ -323,6 +363,23 @@ class ListCategoryControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "expectedCategoryIds": ["%s"],
+                                  "categoryIds": ["%s"]
+                                }
+                                """.formatted(id1, id1)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockFamily
+    void reorderCategories_invalidKindInBody_returns400() throws Exception {
+        // Unknown kind in the body must fail enum binding as 400, not 500.
+        UUID id1 = UUID.randomUUID();
+        mockMvc.perform(put("/api/lists/categories/order")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "kind": "banana",
                                   "expectedCategoryIds": ["%s"],
                                   "categoryIds": ["%s"]
                                 }

@@ -17,6 +17,13 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
@@ -47,6 +54,9 @@ class ListIntegrationTest {
 
     @Autowired
     private ListCategoryService listCategoryService;
+
+    @Autowired
+    private PlatformTransactionManager txManager;
 
     private String uniqueUsername() {
         return "lists" + System.nanoTime();
@@ -780,5 +790,156 @@ class ListIntegrationTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].categoryId").value(nullValue()));
+    }
+
+    // -------------------------------------------------------------------------
+    // updateItem validates the category BEFORE mutating the item: a bad category
+    // rolls the whole request back, so a changed text is never persisted.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void updateItem_invalidCategory_returns404_andDoesNotPersistTextMutation() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndGetToken(username);
+
+        // Grocery list (seeded categories → grouped); grab a real category for the initial item.
+        String listBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Groceries", "kind": "grocery"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String listId = JsonPath.read(listBody, "$.data.id");
+
+        String detailBody = mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String produceCategoryId = JsonPath.read(detailBody, "$.data.categories[0].id");
+
+        String itemBody = mockMvc.perform(post("/api/lists/{id}/items", listId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Original", "categoryId": "%s"}
+                                """.formatted(produceCategoryId)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String itemId = JsonPath.read(itemBody, "$.data.id");
+
+        // PATCH changes text + completion AND points at a non-existent category. The 404 must roll the
+        // whole request back: category resolution runs before the item is mutated, so nothing persists.
+        UUID missingCategoryId = UUID.randomUUID();
+        mockMvc.perform(patch("/api/lists/{listId}/items/{itemId}", listId, itemId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Changed", "completed": true, "categoryId": "%s"}
+                                """.formatted(missingCategoryId)))
+                .andExpect(status().isNotFound());
+
+        // The item is unchanged: original text, not completed, original category.
+        mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].text").value("Original"))
+                .andExpect(jsonPath("$.data.items[0].completed").value(false))
+                .andExpect(jsonPath("$.data.items[0].categoryId").value(produceCategoryId));
+    }
+
+    // -------------------------------------------------------------------------
+    // Lock-serialized contention: a grouped PATCH blocked behind an in-flight
+    // final-category delete observes the post-commit empty catalog and returns 409.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void deleteLastCategory_concurrentGroupedPatch_lockSerialized_returns409_andListFlat() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndGetToken(username);
+        Family family = familyRepository.findByUsername(username).orElseThrow();
+
+        String listBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Notes", "kind": "general"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String listId = JsonPath.read(listBody, "$.data.id");
+
+        var cat = listCategoryService.create(new CreateListCategoryRequest(ListKind.GENERAL, "Solo"), family);
+
+        mockMvc.perform(patch("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"categoryDisplayMode": "grouped"}
+                                """))
+                .andExpect(status().isOk());
+
+        TransactionTemplate txTemplate = new TransactionTemplate(txManager);
+        CountDownLatch aHoldsLock = new CountDownLatch(1);
+        CountDownLatch aMayCommit = new CountDownLatch(1);
+        CountDownLatch bDone = new CountDownLatch(1);
+        AtomicInteger bStatus = new AtomicInteger(-1);
+
+        // Thread A deletes the only category inside an open transaction, holding the (family, GENERAL)
+        // scope lock and (uncommitted) flattening the grouped list.
+        Thread a = new Thread(() -> txTemplate.executeWithoutResult(status -> {
+            listCategoryService.delete(cat.id(), family);
+            aHoldsLock.countDown();
+            awaitLatch(aMayCommit);
+        }));
+
+        // Thread B asks to group the list. It must block on the scope lock, then see the now-empty
+        // catalog after A commits and return 409.
+        Thread b = new Thread(() -> {
+            try {
+                bStatus.set(mockMvc.perform(patch("/api/lists/{id}", listId)
+                                .header("Authorization", "Bearer " + token)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {"categoryDisplayMode": "grouped"}
+                                        """))
+                        .andReturn().getResponse().getStatus());
+            } catch (Exception ex) {
+                bStatus.set(-2);
+            } finally {
+                bDone.countDown();
+            }
+        });
+
+        a.start();
+        awaitLatch(aHoldsLock);   // A holds the scope lock with its final-delete uncommitted
+        b.start();                // B contends for the same scope lock and blocks
+        aMayCommit.countDown();   // let A commit and release the lock
+        boolean bFinished = bDone.await(20, TimeUnit.SECONDS);
+        a.join(5000);
+        b.join(5000);
+
+        assertThat(bFinished).isTrue();
+        assertThat(bStatus.get())
+                .as("grouped PATCH serialized behind the final delete sees an empty catalog")
+                .isEqualTo(409);
+
+        // The list was flattened by the committed delete and stays flat.
+        mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryDisplayMode").value("flat"));
+    }
+
+    private static void awaitLatch(CountDownLatch latch) {
+        try {
+            if (!latch.await(20, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting for latch");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 }

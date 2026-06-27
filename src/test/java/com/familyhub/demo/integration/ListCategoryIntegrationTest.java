@@ -22,6 +22,8 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,6 +69,9 @@ class ListCategoryIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager txManager;
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -509,6 +515,59 @@ class ListCategoryIntegrationTest {
         assertThat(count).isEqualTo(1);
     }
 
+    @Test
+    void duplicateNameRace_throughHttpApi_oneCreatedOneConflict_noServerError() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndGetToken(username);
+        Family family = familyRepository.findByUsername(username).orElseThrow();
+
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(2);
+        AtomicInteger created201 = new AtomicInteger(0);
+        AtomicInteger conflict409 = new AtomicInteger(0);
+        AtomicInteger serverError5xx = new AtomicInteger(0);
+        AtomicInteger otherStatus = new AtomicInteger(0);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        // Two concurrent POSTs that collide case-insensitively must resolve at the HTTP boundary as
+        // exactly one 201 and one 409 — never a 500 from the unique-index backstop escaping the advice.
+        String[] names = {"Travel", "travel"};
+        for (String name : names) {
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    int status = mockMvc.perform(post("/api/lists/categories")
+                                    .header("Authorization", "Bearer " + token)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content("{\"kind\":\"general\",\"name\":\"" + name + "\"}"))
+                            .andReturn().getResponse().getStatus();
+                    if (status == 201) created201.incrementAndGet();
+                    else if (status == 409) conflict409.incrementAndGet();
+                    else if (status >= 500) serverError5xx.incrementAndGet();
+                    else otherStatus.incrementAndGet();
+                } catch (Exception ex) {
+                    otherStatus.incrementAndGet();
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        boolean completed = doneLatch.await(15, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        assertThat(completed).isTrue();
+        assertThat(serverError5xx.get()).as("no concurrent POST may escape as 5xx").isEqualTo(0);
+        assertThat(otherStatus.get()).isEqualTo(0);
+        assertThat(created201.get()).isEqualTo(1);
+        assertThat(conflict409.get()).isEqualTo(1);
+
+        // Exactly one row persisted
+        assertThat(listCategoryRepository.countByFamilyAndKind(family, ListKind.GENERAL)).isEqualTo(1);
+    }
+
     // -------------------------------------------------------------------------
     // 6. Concurrent empty-catalog appends produce dense distinct sortOrders
     // -------------------------------------------------------------------------
@@ -598,6 +657,71 @@ class ListCategoryIntegrationTest {
         List<Integer> actualSortOrders = cats.stream().map(c -> c.getSortOrder()).toList();
         assertThat(actualSortOrders).containsExactly(0, 1, 2);
         assertThat(actualOrder).containsExactly(cat1.id(), cat2.id(), cat3.id());
+    }
+
+    @Test
+    void reorderContention_lockSerializedAgainstConcurrentCreate_returns409_orderIntact() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndGetToken(username);
+        Family family = familyRepository.findByUsername(username).orElseThrow();
+
+        var cat1 = listCategoryService.create(new CreateListCategoryRequest(ListKind.GENERAL, "Alpha"), family);
+        var cat2 = listCategoryService.create(new CreateListCategoryRequest(ListKind.GENERAL, "Beta"), family);
+
+        TransactionTemplate txTemplate = new TransactionTemplate(txManager);
+        CountDownLatch aHoldsLock = new CountDownLatch(1);
+        CountDownLatch aMayCommit = new CountDownLatch(1);
+        CountDownLatch bDone = new CountDownLatch(1);
+        AtomicReference<UUID> cat3Id = new AtomicReference<>();
+        AtomicInteger bStatus = new AtomicInteger(-1);
+
+        // Thread A opens a transaction, creates a 3rd category (acquiring + holding the (family, GENERAL)
+        // scope lock), and parks with the transaction open so the lock stays held.
+        Thread a = new Thread(() -> txTemplate.executeWithoutResult(status -> {
+            var created = listCategoryService.create(new CreateListCategoryRequest(ListKind.GENERAL, "Gamma"), family);
+            cat3Id.set(created.id());
+            aHoldsLock.countDown();
+            awaitLatch(aMayCommit);
+        }));
+
+        // Thread B submits a reorder whose baseline [cat1, cat2] is about to go stale. It must block on the
+        // scope lock until A commits, then observe [cat1, cat2, cat3] and return 409 — never overwriting order.
+        Thread b = new Thread(() -> {
+            try {
+                bStatus.set(mockMvc.perform(put("/api/lists/categories/order")
+                                .header("Authorization", "Bearer " + token)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                          "kind": "general",
+                                          "expectedCategoryIds": ["%s", "%s"],
+                                          "categoryIds": ["%s", "%s"]
+                                        }
+                                        """.formatted(cat1.id(), cat2.id(), cat2.id(), cat1.id())))
+                        .andReturn().getResponse().getStatus());
+            } catch (Exception ex) {
+                bStatus.set(-2);
+            } finally {
+                bDone.countDown();
+            }
+        });
+
+        a.start();
+        awaitLatch(aHoldsLock);   // A holds the scope lock with its create still uncommitted
+        b.start();                // B contends for the same scope lock and blocks
+        aMayCommit.countDown();   // let A commit and release the lock
+        boolean bFinished = bDone.await(20, TimeUnit.SECONDS);
+        a.join(5000);
+        b.join(5000);
+
+        assertThat(bFinished).isTrue();
+        assertThat(bStatus.get()).as("reorder serialized after the create must see a stale baseline").isEqualTo(409);
+
+        // The catalog is intact and dense: [cat1, cat2, cat3] at 0,1,2 — B wrote nothing.
+        var cats = listCategoryRepository.findByFamilyAndKindOrderBySortOrderAsc(family, ListKind.GENERAL);
+        assertThat(cats.stream().map(c -> c.getId()).toList())
+                .containsExactly(cat1.id(), cat2.id(), cat3Id.get());
+        assertThat(cats.stream().map(c -> c.getSortOrder()).toList()).containsExactly(0, 1, 2);
     }
 
     // -------------------------------------------------------------------------
@@ -826,5 +950,16 @@ class ListCategoryIntegrationTest {
         return "[" + ids.stream()
                 .map(id -> "\"" + id + "\"")
                 .collect(Collectors.joining(",")) + "]";
+    }
+
+    private static void awaitLatch(CountDownLatch latch) {
+        try {
+            if (!latch.await(20, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting for latch");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 }
