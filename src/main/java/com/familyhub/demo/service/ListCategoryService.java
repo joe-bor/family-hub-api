@@ -76,7 +76,7 @@ public class ListCategoryService {
         category.setName(name);
         categoryRepository.saveAndFlush(category);
 
-        long itemCount = itemCountForCategory(family, category.getKind(), id);
+        long itemCount = itemRepository.countByCategory(family.getId(), id);
         return new ListCategoryManagementEntry(
                 id, category.getKind(), name, category.getSortOrder(), itemCount);
     }
@@ -187,14 +187,5 @@ public class ListCategoryService {
                 .toList();
 
         return new ListCategoryCatalogResponse(kind, groupedListCount, entries);
-    }
-
-    private long itemCountForCategory(Family family, ListKind kind, UUID categoryId) {
-        return itemRepository.countUsage(family.getId(), kind)
-                .stream()
-                .filter(u -> categoryId.equals(u.getCategoryId()))
-                .mapToLong(SharedListItemRepository.CategoryUsageCount::getItemCount)
-                .findFirst()
-                .orElse(0L);
     }
 }

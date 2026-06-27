@@ -28,6 +28,13 @@ public interface SharedListItemRepository extends JpaRepository<SharedListItem, 
             """)
     List<CategoryUsageCount> countUsage(@Param("familyId") UUID familyId, @Param("kind") ListKind kind);
 
+    @Query("""
+            select count(item.id) from SharedListItem item
+            where item.familyId = :familyId
+              and item.category.id = :categoryId
+            """)
+    long countByCategory(@Param("familyId") UUID familyId, @Param("categoryId") UUID categoryId);
+
     @Transactional
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
