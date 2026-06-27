@@ -709,7 +709,14 @@ class ListCategoryIntegrationTest {
         a.start();
         awaitLatch(aHoldsLock);   // A holds the scope lock with its create still uncommitted
         b.start();                // B contends for the same scope lock and blocks
-        aMayCommit.countDown();   // let A commit and release the lock
+        try {
+            awaitScopeLockWaiter();
+            assertThat(bDone.await(250, TimeUnit.MILLISECONDS))
+                    .as("reorder request must remain blocked while the create transaction holds the scope lock")
+                    .isFalse();
+        } finally {
+            aMayCommit.countDown();   // let A commit and release the lock
+        }
         boolean bFinished = bDone.await(20, TimeUnit.SECONDS);
         a.join(5000);
         b.join(5000);
@@ -952,6 +959,24 @@ class ListCategoryIntegrationTest {
                 .collect(Collectors.joining(",")) + "]";
     }
 
+    private void awaitScopeLockWaiter() {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (System.nanoTime() < deadline) {
+            Integer waiters = jdbcTemplate.queryForObject("""
+                    select count(*)
+                    from pg_stat_activity
+                    where wait_event_type = 'Lock'
+                      and query ilike '%list_category_catalog_scope%'
+                      and pid <> pg_backend_pid()
+                    """, Integer.class);
+            if (waiters != null && waiters > 0) {
+                return;
+            }
+            sleepBriefly();
+        }
+        throw new AssertionError("Timed out waiting for a request blocked on the list category scope lock");
+    }
+
     private static void awaitLatch(CountDownLatch latch) {
         try {
             if (!latch.await(20, TimeUnit.SECONDS)) {
@@ -960,6 +985,15 @@ class ListCategoryIntegrationTest {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
+        }
+    }
+
+    private static void sleepBriefly() {
+        try {
+            Thread.sleep(25);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for lock contention", e);
         }
     }
 }
