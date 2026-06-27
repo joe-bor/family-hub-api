@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.7.0](https://github.com/joe-bor/family-hub-api/compare/v1.6.0...v1.7.0) (2026-06-27)
+
+
+### Features
+
+* **lists:** add category catalog scope migration ([8743eb4](https://github.com/joe-bor/family-hub-api/commit/8743eb4b4d7e857bc57443ca378273822e6aa507))
+* **lists:** define managed category contracts ([0e56567](https://github.com/joe-bor/family-hub-api/commit/0e5656770ebcbbc76170cdbc2d9b79ae84b3fb40))
+* **lists:** enable family categories across list kinds ([21c5618](https://github.com/joe-bor/family-hub-api/commit/21c561824de854ecff426859e2e9160300686991))
+* **lists:** expose family category catalog API ([6a0e8cc](https://github.com/joe-bor/family-hub-api/commit/6a0e8cca6aa5eda87c658915efe913db7d38961d))
+* **lists:** manage serialized category catalogs ([5a07d83](https://github.com/joe-bor/family-hub-api/commit/5a07d8367099ac0839a6cc2a4a9faca6ae9ef473))
+
+
+### Bug Fixes
+
+* **lists:** make category bulk updates transactional ([e30717c](https://github.com/joe-bor/family-hub-api/commit/e30717c9aaf6cb60adf3515013f8595ab897f5dc))
+* **lists:** validate item category before mutation and trim-aware name length ([0a5118c](https://github.com/joe-bor/family-hub-api/commit/0a5118c861d2123dcd691fa3d1a53d25dbde9b82))
+* **release:** fail closed when backend release is unavailable ([87e6ff0](https://github.com/joe-bor/family-hub-api/commit/87e6ff0819396dc20ea25c416de1c535e48ecc71))
+
+
+### Code Refactoring
+
+* **lists:** targeted item count on rename and descriptive catalog message ([b295744](https://github.com/joe-bor/family-hub-api/commit/b295744d0de43b9cec5edda49d2514dea1ba1795))
+
+
+### Documentation
+
+* add project README ([4891579](https://github.com/joe-bor/family-hub-api/commit/48915792867e4d0ee1732f57ddaf93994050b9f6))
+* **release:** clarify resolver intent and extend parser test coverage ([cede2e2](https://github.com/joe-bor/family-hub-api/commit/cede2e2593cc54d754d247462513f6a8eb3a2322))
+
+
+### Tests
+
+* **chore:** clear leftover list items before family wipe ([33c5a64](https://github.com/joe-bor/family-hub-api/commit/33c5a64745463986421c8627e1fb814b938dfbcb))
+* **lists:** cover V17 normalized-duplicate migration guard ([151995f](https://github.com/joe-bor/family-hub-api/commit/151995f32eb1d6f6336f7caa54a161aad44e5f6e))
+* **lists:** guard list-mode stability and refactor item assignment ([e7037b5](https://github.com/joe-bor/family-hub-api/commit/e7037b56ccfe135d69d64801fa56cde6deec836c))
+* **lists:** malformed body kind, HTTP dup race, and lock-serialized contention ([54ad72f](https://github.com/joe-bor/family-hub-api/commit/54ad72fbb17871a169262e39eaaf26af09ad079d))
+* **lists:** prove category scope lock contention ([0eac34c](https://github.com/joe-bor/family-hub-api/commit/0eac34c8df2b5323ddcafc042c2d7a678ded21d3))
+* **lists:** strengthen category service reorder and delete ordering coverage ([6e1d3b1](https://github.com/joe-bor/family-hub-api/commit/6e1d3b15f0c7f20d2257165804ad7eb2bf99a8c0))
+* **lists:** tighten category API isolation and rollback assertions ([0d77f63](https://github.com/joe-bor/family-hub-api/commit/0d77f63c4d30ccf6e4589794dc11fbfc94e6e700))
+
 ## [1.6.0](https://github.com/joe-bor/family-hub-api/compare/v1.5.0...v1.6.0) (2026-06-12)
 
 
