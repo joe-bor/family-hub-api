@@ -47,7 +47,9 @@ public class ListCategoryController {
         } catch (IllegalArgumentException ex) {
             throw new BadRequestException("Invalid list kind.");
         }
-        return ResponseEntity.ok(new ApiResponse<>(listCategoryService.getCatalog(listKind, family), ""));
+        return ResponseEntity.ok(
+                new ApiResponse<>(listCategoryService.getCatalog(listKind, family), "Categories retrieved successfully")
+        );
     }
 
     @PostMapping

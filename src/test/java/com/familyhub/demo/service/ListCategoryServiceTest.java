@@ -224,8 +224,7 @@ class ListCategoryServiceTest {
         when(categoryRepository.existsByNormalizedName(family, ListKind.GROCERY, "Organic Produce", CAT_A_ID))
                 .thenReturn(false);
         when(categoryRepository.saveAndFlush(produce)).thenReturn(produce);
-        SharedListItemRepository.CategoryUsageCount usage = mockUsage(CAT_A_ID, 7L);
-        when(itemRepository.countUsage(FAMILY_ID, ListKind.GROCERY)).thenReturn(List.of(usage));
+        when(itemRepository.countByCategory(FAMILY_ID, CAT_A_ID)).thenReturn(7L);
 
         ListCategoryManagementEntry entry =
                 listCategoryService.rename(CAT_A_ID, new RenameListCategoryRequest("  Organic Produce  "), family);
