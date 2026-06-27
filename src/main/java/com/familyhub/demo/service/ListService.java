@@ -135,9 +135,12 @@ public class ListService {
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("List Item", itemId));
 
-        applyItemMutation(item, request);
+        // Resolve and validate the requested category BEFORE mutating the managed item, so a stale,
+        // missing, foreign, or wrong-kind category is rejected before any field is changed.
         // PATCH-replace semantics: a null categoryId clears the assignment (selects "Uncategorized").
-        item.setCategory(resolveCategory(list, request.categoryId()));
+        ListCategory category = resolveCategory(list, request.categoryId());
+        applyItemMutation(item, request);
+        item.setCategory(category);
 
         sharedListRepository.saveAndFlush(list);
         return ListMapper.toItemDto(item);
