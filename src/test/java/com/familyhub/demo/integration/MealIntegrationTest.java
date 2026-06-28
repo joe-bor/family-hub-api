@@ -40,6 +40,174 @@ class MealIntegrationTest {
         String token = registerAndToken(uniqueUsername(), "Meals Family");
         String otherToken = registerAndToken(uniqueUsername(), "Other Meals Family");
 
+        String createBatchRecipeBody = mockMvc.perform(post("/api/recipes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Batch Enchiladas",
+                                  "imageUrl": "https://cdn.example.com/enchiladas.jpg",
+                                  "note": "Freeze half"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String batchRecipeId = JsonPath.read(createBatchRecipeBody, "$.data.id");
+
+        mockMvc.perform(post("/api/meals/plans")
+                        .header("Authorization", "Bearer " + otherToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-14",
+                                  "slots": [
+                                    {
+                                      "dayIndex": 1,
+                                      "mealType": "dinner",
+                                      "primary": {
+                                        "sourceType": "recipe",
+                                        "recipeId": "%s",
+                                        "title": null,
+                                        "imageUrl": null,
+                                        "note": null
+                                      },
+                                      "extras": [],
+                                      "note": null
+                                    }
+                                  ]
+                                }
+                                """.formatted(batchRecipeId)))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/meals/plans")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-14",
+                                  "slots": [
+                                    {
+                                      "dayIndex": 0,
+                                      "mealType": "dinner",
+                                      "primary": {
+                                        "sourceType": "quick",
+                                        "recipeId": null,
+                                        "title": "Sheet Pan Chicken",
+                                        "imageUrl": null,
+                                        "note": "Use peppers"
+                                      },
+                                      "extras": [
+                                        {
+                                          "sourceType": "quick",
+                                          "recipeId": null,
+                                          "title": "Rice",
+                                          "imageUrl": null,
+                                          "note": null
+                                        }
+                                      ],
+                                      "note": "Batch Monday dinner"
+                                    },
+                                    {
+                                      "dayIndex": 1,
+                                      "mealType": "dinner",
+                                      "primary": {
+                                        "sourceType": "recipe",
+                                        "recipeId": "%s",
+                                        "title": null,
+                                        "imageUrl": null,
+                                        "note": null
+                                      },
+                                      "extras": [],
+                                      "note": null
+                                    }
+                                  ]
+                                }
+                                """.formatted(batchRecipeId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Meal plan saved successfully"))
+                .andExpect(jsonPath("$.data.weekStartDate").value("2026-06-14"))
+                .andExpect(jsonPath("$.data.days.length()").value(7))
+                .andExpect(jsonPath("$.data.days[0].slots[0].mealType").value("breakfast"))
+                .andExpect(jsonPath("$.data.days[0].slots[1].mealType").value("lunch"))
+                .andExpect(jsonPath("$.data.days[0].slots[2].mealType").value("dinner"))
+                .andExpect(jsonPath("$.data.days[0].slots[2].primary.sourceType").value("quick"))
+                .andExpect(jsonPath("$.data.days[0].slots[2].primary.title").value("Sheet Pan Chicken"))
+                .andExpect(jsonPath("$.data.days[0].slots[2].primary.note").value("Use peppers"))
+                .andExpect(jsonPath("$.data.days[0].slots[2].extras[0].title").value("Rice"))
+                .andExpect(jsonPath("$.data.days[0].slots[2].note").value("Batch Monday dinner"))
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary.sourceType").value("recipe"))
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary.title").value("Batch Enchiladas"))
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary.imageUrl").value("https://cdn.example.com/enchiladas.jpg"))
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary.note").value("Freeze half"));
+
+        mockMvc.perform(patch("/api/recipes/{id}", batchRecipeId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Batch Enchiladas Updated",
+                                  "imageUrl": "https://cdn.example.com/enchiladas-updated.jpg",
+                                  "note": "Updated batch note"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/meals/board")
+                        .header("Authorization", "Bearer " + token)
+                        .param("weekStartDate", "2026-06-14"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary.title").value("Batch Enchiladas"))
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary.imageUrl").value("https://cdn.example.com/enchiladas.jpg"))
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary.note").value("Freeze half"));
+
+        mockMvc.perform(post("/api/meals/plans")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-14",
+                                  "slots": [
+                                    {
+                                      "dayIndex": 0,
+                                      "mealType": "dinner",
+                                      "primary": {
+                                        "sourceType": "quick",
+                                        "recipeId": null,
+                                        "title": "Should Not Replace",
+                                        "imageUrl": null,
+                                        "note": null
+                                      },
+                                      "extras": [],
+                                      "note": null
+                                    },
+                                    {
+                                      "dayIndex": 2,
+                                      "mealType": "dinner",
+                                      "primary": {
+                                        "sourceType": "quick",
+                                        "recipeId": null,
+                                        "title": "Should Not Save",
+                                        "imageUrl": null,
+                                        "note": null
+                                      },
+                                      "extras": [],
+                                      "note": null
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Some meal slots are no longer empty."));
+
+        mockMvc.perform(get("/api/meals/board")
+                        .header("Authorization", "Bearer " + token)
+                        .param("weekStartDate", "2026-06-14"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.days[0].slots[2].primary.title").value("Sheet Pan Chicken"))
+                .andExpect(jsonPath("$.data.days[2].slots[2].primary").doesNotExist());
+
         mockMvc.perform(get("/api/meals/board")
                         .header("Authorization", "Bearer " + token)
                         .param("weekStartDate", "2026-06-07"))
