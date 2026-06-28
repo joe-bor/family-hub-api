@@ -10,6 +10,6 @@ import java.util.List;
 
 public record SaveMealPlanRequest(
         @NotNull LocalDate weekStartDate,
-        @Valid @NotEmpty @Size(max = 21) List<SaveMealPlanSlotRequest> slots
+        @Valid @NotEmpty @Size(max = 21) List<@NotNull SaveMealPlanSlotRequest> slots
 ) {
 }
