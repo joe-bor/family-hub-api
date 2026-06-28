@@ -837,6 +837,42 @@ class MealServiceTest {
     }
 
     @Test
+    void savePlan_rejectsNullSlotsBeforeRepositoryWork() {
+        assertThatThrownBy(() -> mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                null
+        ), family)).isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("At least one meal plan slot is required.");
+
+        verifyNoInteractions(mealSlotRepository, recipeRepository);
+    }
+
+    @Test
+    void savePlan_rejectsEmptySlotsBeforeRepositoryWork() {
+        assertThatThrownBy(() -> mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                List.of()
+        ), family)).isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("At least one meal plan slot is required.");
+
+        verifyNoInteractions(mealSlotRepository, recipeRepository);
+    }
+
+    @Test
+    void savePlan_rejectsNullSlotEntryBeforeRepositoryWork() {
+        List<SaveMealPlanSlotRequest> slots = new ArrayList<>();
+        slots.add(null);
+
+        assertThatThrownBy(() -> mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                slots
+        ), family)).isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Meal plan slot is required.");
+
+        verifyNoInteractions(mealSlotRepository, recipeRepository);
+    }
+
+    @Test
     void savePlan_treatsExtrasOnlySlotAsConflict() {
         MealSlot extrasOnly = extrasOnlySlot(5, MealType.LUNCH, List.of("Chips"));
         when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
@@ -853,6 +889,25 @@ class MealServiceTest {
                 ))
         ), family)).isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Some meal slots are no longer empty.");
+
+        verify(mealSlotRepository, never()).saveAll(any());
+        verify(mealSlotRepository, never()).flush();
+    }
+
+    @Test
+    void savePlan_validationFailureAfterEarlierValidSlotWritesNothing() {
+        UUID missingRecipeId = UUID.randomUUID();
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of());
+        when(recipeRepository.findByIdAndFamily(missingRecipeId, family)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                List.of(
+                        new SaveMealPlanSlotRequest(0, MealType.DINNER, quickMeal("Tacos"), List.of(), null),
+                        new SaveMealPlanSlotRequest(1, MealType.DINNER, recipeMeal(missingRecipeId), List.of(), null)
+                )
+        ), family)).isInstanceOf(ResourceNotFoundException.class);
 
         verify(mealSlotRepository, never()).saveAll(any());
         verify(mealSlotRepository, never()).flush();

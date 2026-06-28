@@ -336,8 +336,15 @@ public class MealService {
     }
 
     private void validateUniqueTargets(List<SaveMealPlanSlotRequest> slots) {
+        if (slots == null || slots.isEmpty()) {
+            throw new BadRequestException("At least one meal plan slot is required.");
+        }
+
         Set<SlotKey> targets = new HashSet<>();
         for (SaveMealPlanSlotRequest slot : slots) {
+            if (slot == null) {
+                throw new BadRequestException("Meal plan slot is required.");
+            }
             if (!targets.add(new SlotKey(slot.dayIndex(), slot.mealType()))) {
                 throw new BadRequestException("Meal plan contains duplicate target slots.");
             }
