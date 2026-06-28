@@ -6,9 +6,12 @@ import com.familyhub.demo.dto.MealSlotEntryResponse;
 import com.familyhub.demo.dto.MealSlotResponse;
 import com.familyhub.demo.dto.MoveMealSlotRequest;
 import com.familyhub.demo.dto.RemoveMealSlotRequest;
+import com.familyhub.demo.dto.SaveMealPlanRequest;
+import com.familyhub.demo.dto.SaveMealPlanSlotRequest;
 import com.familyhub.demo.dto.UpsertMealSlotRequest;
 import com.familyhub.demo.dto.DuplicateMealSlotRequest;
 import com.familyhub.demo.exception.BadRequestException;
+import com.familyhub.demo.exception.ConflictException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.model.MealCollisionMode;
 import com.familyhub.demo.model.Family;
@@ -43,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -715,6 +719,145 @@ class MealServiceTest {
         verify(mealSlotRepository, never()).delete(any(MealSlot.class));
     }
 
+    @Test
+    void savePlan_writesMultipleEmptyTargetsAndReturnsUpdatedBoard() {
+        AtomicReference<List<MealSlot>> savedSlots = new AtomicReference<>(List.of());
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of())
+                .thenAnswer(invocation -> savedSlots.get());
+        when(mealSlotRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<MealSlot> slots = new ArrayList<>();
+            ((Iterable<MealSlot>) invocation.getArgument(0)).forEach(slot -> slots.add(savedSlot(slot)));
+            savedSlots.set(slots);
+            return slots;
+        });
+
+        MealBoardResponse board = mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                List.of(
+                        new SaveMealPlanSlotRequest(
+                                0,
+                                MealType.BREAKFAST,
+                                quickMeal("Oatmeal"),
+                                List.of(quickMeal("Berries")),
+                                "Use steel cut oats"
+                        ),
+                        new SaveMealPlanSlotRequest(
+                                2,
+                                MealType.DINNER,
+                                quickMeal("Tacos"),
+                                List.of(quickMeal("Rice"), quickMeal("Beans")),
+                                null
+                        )
+                )
+        ), family);
+
+        verify(mealSlotRepository).saveAll(any());
+        verify(mealSlotRepository).flush();
+        assertThat(board.days().get(0).slots().get(0).primary().title()).isEqualTo("Oatmeal");
+        assertThat(board.days().get(0).slots().get(0).extras()).extracting(MealSlotEntryResponse::title)
+                .containsExactly("Berries");
+        assertThat(board.days().get(0).slots().get(0).note()).isEqualTo("Use steel cut oats");
+        assertThat(board.days().get(2).slots().get(2).primary().title()).isEqualTo("Tacos");
+        assertThat(board.days().get(2).slots().get(2).extras()).extracting(MealSlotEntryResponse::title)
+                .containsExactly("Rice", "Beans");
+    }
+
+    @Test
+    void savePlan_snapshotsRecipeTargetsThroughTheAuthenticatedFamily() {
+        Recipe recipe = createRecipe(family, "Original Curry");
+        recipe.setImageUrl("https://cdn.example.com/curry.jpg");
+        recipe.setNote("Toast the spices");
+        AtomicReference<List<MealSlot>> savedSlots = new AtomicReference<>(List.of());
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of())
+                .thenAnswer(invocation -> savedSlots.get());
+        when(recipeRepository.findByIdAndFamily(recipe.getId(), family)).thenReturn(Optional.of(recipe));
+        when(mealSlotRepository.saveAll(any())).thenAnswer(invocation -> {
+            List<MealSlot> slots = new ArrayList<>();
+            ((Iterable<MealSlot>) invocation.getArgument(0)).forEach(slot -> slots.add(savedSlot(slot)));
+            savedSlots.set(slots);
+            return slots;
+        });
+
+        MealBoardResponse board = mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                List.of(new SaveMealPlanSlotRequest(
+                        4,
+                        MealType.DINNER,
+                        recipeMeal(recipe.getId()),
+                        List.of(),
+                        null
+                ))
+        ), family);
+        recipe.setTitle("Updated Curry");
+        recipe.setImageUrl("https://cdn.example.com/updated.jpg");
+        recipe.setNote("Updated note");
+
+        MealSlotEntryResponse plannedMeal = board.days().get(4).slots().get(2).primary();
+        assertThat(plannedMeal.sourceType()).isEqualTo(MealEntrySourceType.RECIPE);
+        assertThat(plannedMeal.recipeId()).isEqualTo(recipe.getId());
+        assertThat(plannedMeal.title()).isEqualTo("Original Curry");
+        assertThat(plannedMeal.imageUrl()).isEqualTo("https://cdn.example.com/curry.jpg");
+        assertThat(plannedMeal.note()).isEqualTo("Toast the spices");
+        verify(recipeRepository).findByIdAndFamily(recipe.getId(), family);
+    }
+
+    @Test
+    void savePlan_rejectsOccupiedTargetAndWritesNothing() {
+        MealSlot occupied = mealSlot(0, MealType.BREAKFAST, "Pancakes", List.of(), null);
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of(occupied));
+
+        assertThatThrownBy(() -> mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                List.of(
+                        new SaveMealPlanSlotRequest(0, MealType.BREAKFAST, quickMeal("Oatmeal"), List.of(), null),
+                        new SaveMealPlanSlotRequest(1, MealType.LUNCH, quickMeal("Soup"), List.of(), null)
+                )
+        ), family)).isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Some meal slots are no longer empty.");
+
+        verify(mealSlotRepository, never()).saveAll(any());
+        verify(mealSlotRepository, never()).flush();
+    }
+
+    @Test
+    void savePlan_rejectsDuplicateTargetsInRequest() {
+        assertThatThrownBy(() -> mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                List.of(
+                        new SaveMealPlanSlotRequest(3, MealType.DINNER, quickMeal("Pizza"), List.of(), null),
+                        new SaveMealPlanSlotRequest(3, MealType.DINNER, quickMeal("Pasta"), List.of(), null)
+                )
+        ), family)).isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Meal plan contains duplicate target slots.");
+
+        verifyNoInteractions(mealSlotRepository, recipeRepository);
+    }
+
+    @Test
+    void savePlan_treatsExtrasOnlySlotAsConflict() {
+        MealSlot extrasOnly = extrasOnlySlot(5, MealType.LUNCH, List.of("Chips"));
+        when(mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(family, WEEK_START))
+                .thenReturn(List.of(extrasOnly));
+
+        assertThatThrownBy(() -> mealService.savePlan(new SaveMealPlanRequest(
+                WEEK_START,
+                List.of(new SaveMealPlanSlotRequest(
+                        5,
+                        MealType.LUNCH,
+                        quickMeal("Sandwich"),
+                        List.of(),
+                        null
+                ))
+        ), family)).isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Some meal slots are no longer empty.");
+
+        verify(mealSlotRepository, never()).saveAll(any());
+        verify(mealSlotRepository, never()).flush();
+    }
+
     private MealEntryRequest quickMeal(String title) {
         return new MealEntryRequest(MealEntrySourceType.QUICK, null, title, null, null);
     }
@@ -734,6 +877,19 @@ class MealServiceTest {
         slot.getEntries().add(entry(slot, MealSlotRole.PRIMARY, 0, primaryTitle));
         for (int i = 0; i < extras.size(); i++) {
             slot.getEntries().add(entry(slot, MealSlotRole.EXTRA, i + 1, extras.get(i)));
+        }
+        return slot;
+    }
+
+    private MealSlot extrasOnlySlot(int dayIndex, MealType mealType, List<String> extras) {
+        MealSlot slot = new MealSlot();
+        slot.setId(UUID.randomUUID());
+        slot.setFamily(family);
+        slot.setWeekStartDate(WEEK_START);
+        slot.setDayIndex(dayIndex);
+        slot.setMealType(mealType);
+        for (int i = 0; i < extras.size(); i++) {
+            slot.getEntries().add(entry(slot, MealSlotRole.EXTRA, i, extras.get(i)));
         }
         return slot;
     }

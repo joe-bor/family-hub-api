@@ -7,8 +7,11 @@ import com.familyhub.demo.dto.MealEntryRequest;
 import com.familyhub.demo.dto.MealSlotResponse;
 import com.familyhub.demo.dto.MoveMealSlotRequest;
 import com.familyhub.demo.dto.RemoveMealSlotRequest;
+import com.familyhub.demo.dto.SaveMealPlanRequest;
+import com.familyhub.demo.dto.SaveMealPlanSlotRequest;
 import com.familyhub.demo.dto.UpsertMealSlotRequest;
 import com.familyhub.demo.exception.BadRequestException;
+import com.familyhub.demo.exception.ConflictException;
 import com.familyhub.demo.exception.ResourceNotFoundException;
 import com.familyhub.demo.mapper.MealMapper;
 import com.familyhub.demo.model.Family;
@@ -29,9 +32,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -86,6 +91,50 @@ public class MealService {
         applyRequestedBlock(slot, requestedEntries, RecipeFieldValidator.optionalText(request.note()), request.collisionMode());
 
         return MealMapper.toSlotDto(mealSlotRepository.saveAndFlush(slot));
+    }
+
+    @Transactional
+    public MealBoardResponse savePlan(SaveMealPlanRequest request, Family family) {
+        validateWeekStartDate(request.weekStartDate());
+        validateUniqueTargets(request.slots());
+
+        List<MealSlot> existingSlots = mealSlotRepository.findByFamilyAndWeekStartDateOrderByDayIndexAscMealTypeAsc(
+                family,
+                request.weekStartDate()
+        );
+        Map<SlotKey, MealSlot> existingSlotsByKey = existingSlots.stream()
+                .collect(Collectors.toMap(
+                        slot -> new SlotKey(slot.getDayIndex(), slot.getMealType()),
+                        Function.identity(),
+                        (existing, duplicate) -> existing));
+
+        for (SaveMealPlanSlotRequest requestedSlot : request.slots()) {
+            MealSlot existingSlot = existingSlotsByKey.get(new SlotKey(requestedSlot.dayIndex(), requestedSlot.mealType()));
+            if (existingSlot != null && !existingSlot.getEntries().isEmpty()) {
+                throw new ConflictException("Some meal slots are no longer empty.");
+            }
+        }
+
+        List<MealSlot> targetSlots = new ArrayList<>();
+        for (SaveMealPlanSlotRequest requestedSlot : request.slots()) {
+            SlotKey key = new SlotKey(requestedSlot.dayIndex(), requestedSlot.mealType());
+            MealSlot slot = existingSlotsByKey.get(key);
+            if (slot == null) {
+                slot = newSlot(family, request.weekStartDate(), requestedSlot.dayIndex(), requestedSlot.mealType());
+            }
+            List<MealSlotEntry> requestedEntries = snapshotEntries(
+                    slot,
+                    requestedSlot.primary(),
+                    normalizedExtras(requestedSlot.extras())
+            );
+            replaceEntries(slot, requestedEntries);
+            slot.setNote(RecipeFieldValidator.optionalText(requestedSlot.note()));
+            targetSlots.add(slot);
+        }
+
+        mealSlotRepository.saveAll(targetSlots);
+        mealSlotRepository.flush();
+        return getBoard(request.weekStartDate(), family);
     }
 
     @Transactional
@@ -284,6 +333,15 @@ public class MealService {
             return List.of();
         }
         return extras.stream().filter(Objects::nonNull).toList();
+    }
+
+    private void validateUniqueTargets(List<SaveMealPlanSlotRequest> slots) {
+        Set<SlotKey> targets = new HashSet<>();
+        for (SaveMealPlanSlotRequest slot : slots) {
+            if (!targets.add(new SlotKey(slot.dayIndex(), slot.mealType()))) {
+                throw new BadRequestException("Meal plan contains duplicate target slots.");
+            }
+        }
     }
 
     private List<MealSlotEntry> copyEntries(MealSlot source, MealSlot destination) {
