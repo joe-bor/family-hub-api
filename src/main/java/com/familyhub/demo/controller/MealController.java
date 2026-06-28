@@ -6,6 +6,7 @@ import com.familyhub.demo.dto.MealBoardResponse;
 import com.familyhub.demo.dto.MealSlotResponse;
 import com.familyhub.demo.dto.MoveMealSlotRequest;
 import com.familyhub.demo.dto.RemoveMealSlotRequest;
+import com.familyhub.demo.dto.SaveMealPlanRequest;
 import com.familyhub.demo.dto.UpsertMealSlotRequest;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.service.MealService;
@@ -46,6 +47,17 @@ public class MealController {
         return ResponseEntity.ok(new ApiResponse<>(
                 mealService.upsertSlot(request, family),
                 "Meal slot updated successfully"
+        ));
+    }
+
+    @PostMapping("/plans")
+    public ResponseEntity<ApiResponse<MealBoardResponse>> savePlan(
+            @Valid @RequestBody SaveMealPlanRequest request,
+            @AuthenticationPrincipal Family family
+    ) {
+        return ResponseEntity.ok(new ApiResponse<>(
+                mealService.savePlan(request, family),
+                "Meal plan saved successfully"
         ));
     }
 

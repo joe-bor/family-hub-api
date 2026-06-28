@@ -6,6 +6,7 @@ import com.familyhub.demo.dto.MealDayResponse;
 import com.familyhub.demo.dto.MealSlotEntryResponse;
 import com.familyhub.demo.dto.MealSlotResponse;
 import com.familyhub.demo.exception.BadRequestException;
+import com.familyhub.demo.exception.ConflictException;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.model.MealEntrySourceType;
 import com.familyhub.demo.model.MealSlotRole;
@@ -146,6 +147,71 @@ class MealControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Meal slot duplicated successfully"));
+    }
+
+    @Test
+    @WithMockFamily
+    void savePlan_returnsUpdatedBoard() throws Exception {
+        given(mealService.savePlan(any(), any(Family.class))).willReturn(sampleBoard());
+
+        mockMvc.perform(post("/api/meals/plans")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "slots": [
+                                    {
+                                      "dayIndex": 0,
+                                      "mealType": "dinner",
+                                      "primary": {
+                                        "sourceType": "quick",
+                                        "recipeId": null,
+                                        "title": "Leftovers",
+                                        "imageUrl": null,
+                                        "note": null
+                                      },
+                                      "extras": [],
+                                      "note": null
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Meal plan saved successfully"))
+                .andExpect(jsonPath("$.data.weekStartDate").value("2026-06-07"))
+                .andExpect(jsonPath("$.data.days[0].slots[2].primary.title").value("Leftovers"));
+    }
+
+    @Test
+    @WithMockFamily
+    void savePlan_conflictReturns409() throws Exception {
+        given(mealService.savePlan(any(), any(Family.class)))
+                .willThrow(new ConflictException("Some meal slots are no longer empty."));
+
+        mockMvc.perform(post("/api/meals/plans")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-07",
+                                  "slots": [
+                                    {
+                                      "dayIndex": 0,
+                                      "mealType": "dinner",
+                                      "primary": {
+                                        "sourceType": "quick",
+                                        "recipeId": null,
+                                        "title": "Leftovers",
+                                        "imageUrl": null,
+                                        "note": null
+                                      },
+                                      "extras": [],
+                                      "note": null
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Some meal slots are no longer empty."));
     }
 
     @Test
