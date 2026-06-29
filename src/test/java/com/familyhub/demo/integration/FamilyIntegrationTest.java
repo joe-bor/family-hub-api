@@ -34,7 +34,7 @@ class FamilyIntegrationTest {
     private FamilyRepository familyRepository;
 
     private String uniqueUsername() {
-        return "family" + System.nanoTime();
+        return "family" + UUID.randomUUID().toString().replace("-", "").substring(0, 14);
     }
 
     private String registerJson(String username) {
