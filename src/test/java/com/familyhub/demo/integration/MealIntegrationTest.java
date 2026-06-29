@@ -142,6 +142,46 @@ class MealIntegrationTest {
                 .andExpect(jsonPath("$.data.days[1].slots[2].primary.imageUrl").value("https://cdn.example.com/enchiladas.jpg"))
                 .andExpect(jsonPath("$.data.days[1].slots[2].primary.note").value("Freeze half"));
 
+        mockMvc.perform(get("/api/meals/board")
+                        .header("Authorization", "Bearer " + otherToken)
+                        .param("weekStartDate", "2026-06-14"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.days[0].slots[2].primary").doesNotExist())
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary").doesNotExist());
+
+        mockMvc.perform(post("/api/meals/plans")
+                        .header("Authorization", "Bearer " + otherToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "weekStartDate": "2026-06-14",
+                                  "slots": [
+                                    {
+                                      "dayIndex": 0,
+                                      "mealType": "dinner",
+                                      "primary": {
+                                        "sourceType": "quick",
+                                        "recipeId": null,
+                                        "title": "Other Family Chili",
+                                        "imageUrl": null,
+                                        "note": null
+                                      },
+                                      "extras": [],
+                                      "note": null
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.days[0].slots[2].primary.title").value("Other Family Chili"));
+
+        mockMvc.perform(get("/api/meals/board")
+                        .header("Authorization", "Bearer " + token)
+                        .param("weekStartDate", "2026-06-14"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.days[0].slots[2].primary.title").value("Sheet Pan Chicken"))
+                .andExpect(jsonPath("$.data.days[1].slots[2].primary.title").value("Batch Enchiladas"));
+
         mockMvc.perform(patch("/api/recipes/{id}", batchRecipeId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
