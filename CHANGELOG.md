@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.8.0](https://github.com/joe-bor/family-hub-api/compare/v1.7.0...v1.8.0) (2026-07-01)
+
+
+### Features
+
+* **meals:** add atomic meal plan save ([f8f35e3](https://github.com/joe-bor/family-hub-api/commit/f8f35e311af4c3102bb7cc5b3e6361517f4e2a6e))
+* **meals:** expose meal plan batch save ([e57e203](https://github.com/joe-bor/family-hub-api/commit/e57e203728c28bf029451b2558a3316364163d80))
+
+
+### Bug Fixes
+
+* **meals:** validate meal plan save slots ([bd01f51](https://github.com/joe-bor/family-hub-api/commit/bd01f514ef0c0750c38a0ee9a5f6fa5f69a9f067))
+
+
+### Tests
+
+* **family:** keep integration usernames valid ([51d9e45](https://github.com/joe-bor/family-hub-api/commit/51d9e45d8abdc69acff7d55ecd6527497f0e54da))
+* **meals:** prove batch save family isolation ([1086d70](https://github.com/joe-bor/family-hub-api/commit/1086d70fb66e1898c737666395088ef5db7d5428))
+
 ## [1.7.0](https://github.com/joe-bor/family-hub-api/compare/v1.6.0...v1.7.0) (2026-06-27)
 
 
