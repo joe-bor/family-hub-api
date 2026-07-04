@@ -120,6 +120,49 @@ public class ListService {
     }
 
     @Transactional
+    public List<ListItemResponse> createItemsBulk(UUID listId, BulkCreateListItemsRequest request, Family family) {
+        // Same scope-lock ordering as createItem: if any item assigns a category, read the immutable
+        // kind projection first, then lock the (family, kind) scope, then load the aggregate. This keeps
+        // Hibernate autoflush from grabbing item/list locks ahead of the scope lock.
+        boolean anyCategory = request.items().stream().anyMatch(item -> item.categoryId() != null);
+        if (anyCategory) {
+            ListKind kind = sharedListRepository.findKindByFamilyAndId(family, listId)
+                    .orElseThrow(() -> new ResourceNotFoundException("List", listId));
+            lockScope(family, kind);
+        }
+
+        SharedList list = getListOrThrow(listId, family);
+
+        // Prevalidation contract: resolve and validate EVERY category BEFORE mutating the aggregate,
+        // so a single bad item never appends a partial row. resolveCategory runs queries, so appending
+        // items first could let Hibernate autoflush persist a partial batch before a later item throws.
+        // `.toList()` forces resolution eagerly in request order; the first invalid item throws here,
+        // before any item is added to the collection and before saveAndFlush runs.
+        List<ListCategory> resolvedCategories = request.items().stream()
+                .map(item -> resolveCategory(list, item.categoryId()))
+                .toList();
+
+        int existingCount = list.getItems().size();
+        for (int i = 0; i < request.items().size(); i++) {
+            SharedListItem item = new SharedListItem();
+            item.setList(list);
+            item.setText(request.items().get(i).text().trim());
+            item.setCompleted(false);
+            item.setCompletedAt(null);
+            item.setCategory(resolvedCategories.get(i));
+            list.getItems().add(item);
+        }
+
+        // One transaction; rolls back entirely on any failure. Read the created rows back off the
+        // saved aggregate (like createItem) so generated ids/timestamps are populated, preserving
+        // request order by taking the freshly appended tail.
+        SharedList saved = sharedListRepository.saveAndFlush(list);
+        return saved.getItems().subList(existingCount, saved.getItems().size()).stream()
+                .map(ListMapper::toItemDto)
+                .toList();
+    }
+
+    @Transactional
     public ListItemResponse updateItem(UUID listId, UUID itemId, UpdateListItemRequest request, Family family) {
         // When a category is requested, route-and-lock the scope BEFORE loading the aggregate
         // (immutable-kind projection first, then lock, then load), matching createItem's ordering.
