@@ -1,9 +1,11 @@
 package com.familyhub.demo.service;
 
+import com.familyhub.demo.dto.BulkCreateListItemsRequest;
 import com.familyhub.demo.dto.ClearCompletedResponse;
 import com.familyhub.demo.dto.CreateListItemRequest;
 import com.familyhub.demo.dto.CreateListRequest;
 import com.familyhub.demo.dto.ListDetailResponse;
+import com.familyhub.demo.dto.ListItemResponse;
 import com.familyhub.demo.dto.UpdateListItemRequest;
 import com.familyhub.demo.dto.UpdateListRequest;
 import com.familyhub.demo.exception.BadRequestException;
@@ -31,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.familyhub.demo.TestDataFactory.LIST_ID;
 import static com.familyhub.demo.TestDataFactory.LIST_ITEM_ID;
@@ -346,6 +349,125 @@ class ListServiceTest {
                 new CreateListItemRequest("Milk", catId),
                 family
         )).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // -------------------------------------------------------------------------
+    // createItemsBulk — transactional bulk append reusing the createItem path
+    // -------------------------------------------------------------------------
+
+    @Test
+    void createItemsBulk_appendsAllItemsInRequestOrder() {
+        when(sharedListRepository.findDetailByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(groceryList));
+        when(sharedListRepository.saveAndFlush(any(SharedList.class))).thenReturn(groceryList);
+
+        List<ListItemResponse> created = listService.createItemsBulk(
+                LIST_ID,
+                new BulkCreateListItemsRequest(List.of(
+                        new CreateListItemRequest("2 chicken breasts", null),
+                        new CreateListItemRequest("1 tbsp olive oil", null),
+                        new CreateListItemRequest("2 cups broccoli", null)
+                )),
+                family
+        );
+
+        assertThat(created).extracting(ListItemResponse::text)
+                .containsExactly("2 chicken breasts", "1 tbsp olive oil", "2 cups broccoli");
+    }
+
+    @Test
+    void createItemsBulk_acceptsMaxItems() {
+        when(sharedListRepository.findDetailByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(groceryList));
+        when(sharedListRepository.saveAndFlush(any(SharedList.class))).thenReturn(groceryList);
+        List<CreateListItemRequest> items = IntStream.range(0, 100)
+                .mapToObj(i -> new CreateListItemRequest("item " + i, null))
+                .toList();
+
+        List<ListItemResponse> created = listService.createItemsBulk(
+                LIST_ID, new BulkCreateListItemsRequest(items), family);
+
+        assertThat(created).hasSize(100);
+        assertThat(created.get(0).text()).isEqualTo("item 0");
+        assertThat(created.get(99).text()).isEqualTo("item 99");
+    }
+
+    @Test
+    void createItemsBulk_listNotFound_throws404() {
+        when(sharedListRepository.findDetailByFamilyAndId(family, LIST_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> listService.createItemsBulk(
+                LIST_ID,
+                new BulkCreateListItemsRequest(List.of(new CreateListItemRequest("milk", null))),
+                family
+        )).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void createItemsBulk_assignsValidSameKindCategory() {
+        when(sharedListRepository.findKindByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(ListKind.GROCERY));
+        when(scopeRepository.lockByFamilyAndKind(family, ListKind.GROCERY)).thenReturn(Optional.of(groceryScope));
+        when(sharedListRepository.findDetailByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(groceryList));
+        when(listCategoryRepository.findByFamilyAndId(family, produceCategory.getId()))
+                .thenReturn(Optional.of(produceCategory));
+        when(sharedListRepository.saveAndFlush(any(SharedList.class))).thenReturn(groceryList);
+
+        List<ListItemResponse> created = listService.createItemsBulk(
+                LIST_ID,
+                new BulkCreateListItemsRequest(List.of(
+                        new CreateListItemRequest("2 chicken breasts", produceCategory.getId())
+                )),
+                family
+        );
+
+        assertThat(created).hasSize(1);
+        assertThat(created.get(0).categoryId()).isEqualTo(produceCategory.getId());
+    }
+
+    @Test
+    void createItemsBulk_missingCategory_throws404AndAppendsNothing() {
+        UUID missingCategoryId = UUID.randomUUID();
+        int before = groceryList.getItems().size();
+        when(sharedListRepository.findKindByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(ListKind.GROCERY));
+        when(scopeRepository.lockByFamilyAndKind(family, ListKind.GROCERY)).thenReturn(Optional.of(groceryScope));
+        when(sharedListRepository.findDetailByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(groceryList));
+        when(listCategoryRepository.findByFamilyAndId(family, missingCategoryId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> listService.createItemsBulk(
+                LIST_ID,
+                new BulkCreateListItemsRequest(List.of(new CreateListItemRequest("mystery", missingCategoryId))),
+                family
+        )).isInstanceOf(ResourceNotFoundException.class);
+
+        assertThat(groceryList.getItems()).hasSize(before);
+    }
+
+    // Proves prevalidation: the wrong-kind second item is rejected DURING category
+    // resolution, before any row is appended and before saveAndFlush is called.
+    @Test
+    void createItemsBulk_wrongKindCategory_throwsAndAppendsNothing() {
+        // createListCategory hardcodes LIST_CATEGORY_ID, so give the TODO category a distinct id
+        // to avoid colliding with produceCategory's id on the two findByFamilyAndId stubs.
+        ListCategory todoCategory = createListCategory(family, ListKind.TODO, "Urgent", 0);
+        todoCategory.setId(UUID.fromString("00000000-0000-0000-0000-0000000000aa"));
+        int before = groceryList.getItems().size();
+        when(sharedListRepository.findKindByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(ListKind.GROCERY));
+        when(scopeRepository.lockByFamilyAndKind(family, ListKind.GROCERY)).thenReturn(Optional.of(groceryScope));
+        when(sharedListRepository.findDetailByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(groceryList));
+        when(listCategoryRepository.findByFamilyAndId(family, produceCategory.getId()))
+                .thenReturn(Optional.of(produceCategory));
+        when(listCategoryRepository.findByFamilyAndId(family, todoCategory.getId()))
+                .thenReturn(Optional.of(todoCategory));
+
+        assertThatThrownBy(() -> listService.createItemsBulk(
+                LIST_ID,
+                new BulkCreateListItemsRequest(List.of(
+                        new CreateListItemRequest("ok row", produceCategory.getId()),
+                        new CreateListItemRequest("bad row", todoCategory.getId()) // wrong-kind category
+                )),
+                family
+        )).isInstanceOf(BadRequestException.class);
+
+        assertThat(groceryList.getItems()).hasSize(before);
+        verify(sharedListRepository, org.mockito.Mockito.never()).saveAndFlush(any(SharedList.class));
     }
 
     // -------------------------------------------------------------------------
