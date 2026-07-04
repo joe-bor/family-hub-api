@@ -121,6 +121,13 @@ public class ListService {
 
     @Transactional
     public List<ListItemResponse> createItemsBulk(UUID listId, BulkCreateListItemsRequest request, Family family) {
+        // Defense-in-depth: the DTO's @Size already bounds this at the request boundary, but guard the
+        // service too so any non-validated caller (e.g. another service) cannot exceed the batch cap.
+        if (request.items().size() > BulkCreateListItemsRequest.MAX_BULK_ITEMS) {
+            throw new BadRequestException(
+                    "A bulk append may contain at most " + BulkCreateListItemsRequest.MAX_BULK_ITEMS + " items");
+        }
+
         // Same scope-lock ordering as createItem: if any item assigns a category, read the immutable
         // kind projection first, then lock the (family, kind) scope, then load the aggregate. This keeps
         // Hibernate autoflush from grabbing item/list locks ahead of the scope lock.

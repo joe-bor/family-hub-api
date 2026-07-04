@@ -17,6 +17,7 @@ import com.familyhub.demo.model.ListCategoryCatalogScope;
 import com.familyhub.demo.model.ListCategoryDisplayMode;
 import com.familyhub.demo.model.ListKind;
 import com.familyhub.demo.model.SharedList;
+import com.familyhub.demo.model.SharedListItem;
 import com.familyhub.demo.repository.ListCategoryCatalogScopeRepository;
 import com.familyhub.demo.repository.ListCategoryRepository;
 import com.familyhub.demo.repository.ListPreferencesRepository;
@@ -388,6 +389,48 @@ class ListServiceTest {
         assertThat(created).hasSize(100);
         assertThat(created.get(0).text()).isEqualTo("item 0");
         assertThat(created.get(99).text()).isEqualTo("item 99");
+    }
+
+    // Defense-in-depth guard: the service rejects an over-max batch before touching the repository,
+    // even though the DTO's @Size normally catches this at the request boundary.
+    @Test
+    void createItemsBulk_overMaxItems_throwsBadRequestBeforeRepositoryAccess() {
+        List<CreateListItemRequest> items = IntStream.range(0, BulkCreateListItemsRequest.MAX_BULK_ITEMS + 1)
+                .mapToObj(i -> new CreateListItemRequest("item " + i, null))
+                .toList();
+
+        assertThatThrownBy(() -> listService.createItemsBulk(
+                LIST_ID, new BulkCreateListItemsRequest(items), family))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(sharedListRepository, org.mockito.Mockito.never())
+                .findDetailByFamilyAndId(any(Family.class), any(UUID.class));
+    }
+
+    @Test
+    void createItemsBulk_appendsAfterExistingItems_returnsOnlyNewItems() {
+        // groceryList already has one item ("Bananas"), so existingCount is non-zero.
+        int before = groceryList.getItems().size();
+        when(sharedListRepository.findDetailByFamilyAndId(family, LIST_ID)).thenReturn(Optional.of(groceryList));
+        when(sharedListRepository.saveAndFlush(any(SharedList.class))).thenReturn(groceryList);
+
+        List<ListItemResponse> created = listService.createItemsBulk(
+                LIST_ID,
+                new BulkCreateListItemsRequest(List.of(
+                        new CreateListItemRequest("2 chicken breasts", null),
+                        new CreateListItemRequest("1 tbsp olive oil", null)
+                )),
+                family
+        );
+
+        // Response holds ONLY the two new items in request order (not the pre-existing "Bananas").
+        assertThat(created).extracting(ListItemResponse::text)
+                .containsExactly("2 chicken breasts", "1 tbsp olive oil");
+        // The aggregate now holds the pre-existing item plus the two appended ones, in insertion order.
+        assertThat(groceryList.getItems()).hasSize(before + 2);
+        assertThat(groceryList.getItems())
+                .extracting(SharedListItem::getText)
+                .containsExactly("Bananas", "2 chicken breasts", "1 tbsp olive oil");
     }
 
     @Test
