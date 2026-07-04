@@ -2,6 +2,7 @@ package com.familyhub.demo.controller;
 
 import com.familyhub.demo.config.SecurityConfig;
 import com.familyhub.demo.dto.ClearCompletedResponse;
+import com.familyhub.demo.dto.ListItemResponse;
 import com.familyhub.demo.dto.ListPreferencesResponse;
 import com.familyhub.demo.model.Family;
 import com.familyhub.demo.security.JwtAuthenticationEntryPoint;
@@ -19,7 +20,11 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.familyhub.demo.TestDataFactory.LIST_ID;
 import static com.familyhub.demo.TestDataFactory.LIST_ITEM_ID;
@@ -128,6 +133,77 @@ class ListControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/lists/" + LIST_ID + "/items/" + LIST_ITEM_ID))
                 .andExpect(jsonPath("$.message").value("List item created successfully"));
+    }
+
+    @Test
+    @WithMockFamily
+    void createItemsBulk_returnsCreatedItemsInOrder() throws Exception {
+        given(listService.createItemsBulk(eq(LIST_ID), any(), any(Family.class)))
+                .willReturn(List.of(
+                        bulkItem("2 chicken breasts"),
+                        bulkItem("1 tbsp olive oil")
+                ));
+
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", LIST_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "items": [ { "text": "2 chicken breasts" }, { "text": "1 tbsp olive oil" } ] }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data[0].text").value("2 chicken breasts"))
+                .andExpect(jsonPath("$.data[1].text").value("1 tbsp olive oil"))
+                .andExpect(jsonPath("$.message").value("List items added successfully"));
+    }
+
+    @Test
+    @WithMockFamily
+    void createItemsBulk_rejectsEmptyItems() throws Exception {
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", LIST_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "items": [] }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockFamily
+    void createItemsBulk_rejectsOverMaxItems() throws Exception {
+        String items = IntStream.range(0, 101)
+                .mapToObj(i -> "{ \"text\": \"item " + i + "\" }")
+                .collect(Collectors.joining(","));
+
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", LIST_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"items\": [" + items + "] }"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockFamily
+    void createItemsBulk_rejectsBlankOrOverlongItemText() throws Exception {
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", LIST_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"items\": [ { \"text\": \"   \" } ] }"))
+                .andExpect(status().isBadRequest());
+
+        String overlong = "x".repeat(101);
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", LIST_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"items\": [ { \"text\": \"" + overlong + "\" } ] }"))
+                .andExpect(status().isBadRequest());
+    }
+
+    private static ListItemResponse bulkItem(String text) {
+        return new ListItemResponse(
+                UUID.randomUUID(),
+                text,
+                false,
+                null,
+                null,
+                LocalDateTime.of(2026, 5, 6, 9, 0),
+                LocalDateTime.of(2026, 5, 6, 9, 0)
+        );
     }
 
     @Test
