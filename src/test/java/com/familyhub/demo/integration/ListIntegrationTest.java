@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -271,7 +272,7 @@ class ListIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String todoCategoryId = JsonPath.read(todoDetail, "$.data.categories[0].id");
 
-        // Append two items to the grocery list; assert order and persistence.
+        // Append two items to the grocery list. Strict request order is asserted on the RESPONSE.
         mockMvc.perform(post("/api/lists/{id}/items/bulk", groceryListId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -282,11 +283,15 @@ class ListIntegrationTest {
                 .andExpect(jsonPath("$.data[0].text").value("2 chicken breasts"))
                 .andExpect(jsonPath("$.data[1].text").value("1 tbsp olive oil"));
 
+        // GET-back asserts persistence by MEMBERSHIP/count, not strict order: same-batch items tie on
+        // the non-unique createdAt, and @OrderBy("createdAt ASC, id ASC") only guarantees a stable
+        // (deterministic) read order, not the original insertion order.
         mockMvc.perform(get("/api/lists/{id}", groceryListId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].text").value("2 chicken breasts"))
-                .andExpect(jsonPath("$.data.items[1].text").value("1 tbsp olive oil"));
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[*].text",
+                        containsInAnyOrder("2 chicken breasts", "1 tbsp olive oil")));
 
         // Generic proof: the same endpoint appends to a to-do list (no grocery coupling).
         mockMvc.perform(post("/api/lists/{id}/items/bulk", todoListId)
@@ -336,6 +341,51 @@ class ListIntegrationTest {
                                 { "items": [ { "text": "milk" } ] }
                                 """))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void bulkAppend_ontoNonEmptyList_appendsAfterExistingItems() throws Exception {
+        String token = registerAndGetToken(uniqueUsername());
+
+        String listBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Groceries", "kind": "grocery"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String listId = JsonPath.read(listBody, "$.data.id");
+
+        // Pre-existing single item so the bulk append runs against a non-zero existingCount.
+        mockMvc.perform(post("/api/lists/{id}/items", listId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "existing milk"}
+                                """))
+                .andExpect(status().isCreated());
+
+        // (a) The bulk RESPONSE contains ONLY the newly-created items, in request order —
+        //     the pre-existing item is not echoed back, proving the subList(existingCount, size) offset.
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", listId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "items": [ { "text": "2 chicken breasts" }, { "text": "1 tbsp olive oil" } ] }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].text").value("2 chicken breasts"))
+                .andExpect(jsonPath("$.data[1].text").value("1 tbsp olive oil"));
+
+        // (b) GET-back contains the pre-existing item PLUS the two new ones (membership/count).
+        mockMvc.perform(get("/api/lists/{id}", listId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(3))
+                .andExpect(jsonPath("$.data.items[*].text",
+                        containsInAnyOrder("existing milk", "2 chicken breasts", "1 tbsp olive oil")));
     }
 
     // -------------------------------------------------------------------------
