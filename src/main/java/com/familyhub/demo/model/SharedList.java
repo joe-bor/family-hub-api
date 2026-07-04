@@ -39,7 +39,11 @@ public class SharedList {
     private Boolean showCompletedOverride;
 
     @OneToMany(mappedBy = "list", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("createdAt ASC")
+    // createdAt is a non-unique @CreationTimestamp; items created in one bulk flush tie on it.
+    // The id tiebreaker makes reads deterministic/stable (though not insertion-ordered for tied
+    // rows — strict request order is guaranteed only on the bulk POST response, which slices the
+    // in-memory insertion-ordered collection).
+    @OrderBy("createdAt ASC, id ASC")
     private List<SharedListItem> items = new ArrayList<>();
 
     @CreationTimestamp
