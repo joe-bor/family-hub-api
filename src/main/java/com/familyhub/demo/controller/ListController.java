@@ -5,6 +5,7 @@ import com.familyhub.demo.model.Family;
 import com.familyhub.demo.service.ListService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -60,6 +61,17 @@ public class ListController {
         ListItemResponse response = listService.createItem(id, request, family);
         return ResponseEntity.created(URI.create("/api/lists/" + id + "/items/" + response.id()))
                 .body(new ApiResponse<>(response, "List item created successfully"));
+    }
+
+    @PostMapping("/{id}/items/bulk")
+    public ResponseEntity<ApiResponse<List<ListItemResponse>>> createItemsBulk(
+            @PathVariable UUID id,
+            @Valid @RequestBody BulkCreateListItemsRequest request,
+            @AuthenticationPrincipal Family family
+    ) {
+        List<ListItemResponse> response = listService.createItemsBulk(id, request, family);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new ApiResponse<>(response, "List items added successfully"));
     }
 
     @PatchMapping("/{listId}/items/{itemId}")

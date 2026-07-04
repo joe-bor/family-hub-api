@@ -235,6 +235,110 @@ class ListIntegrationTest {
     }
 
     // -------------------------------------------------------------------------
+    // Bulk append: ordering + persistence, generic (non-grocery) support, rollback
+    // -------------------------------------------------------------------------
+
+    @Test
+    void bulkAppend_ordersPersistsIsGeneric_andRollsBackOnBadCategory() throws Exception {
+        String username = uniqueUsername();
+        String token = registerAndGetToken(username);
+
+        // Grocery list (seeded categories → grouped).
+        String groceryBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Groceries", "kind": "grocery"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String groceryListId = JsonPath.read(groceryBody, "$.data.id");
+
+        // To-do list, plus one of its seeded TODO categories (wrong kind for the grocery list).
+        String todoBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Chores", "kind": "to-do"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String todoListId = JsonPath.read(todoBody, "$.data.id");
+
+        String todoDetail = mockMvc.perform(get("/api/lists/{id}", todoListId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String todoCategoryId = JsonPath.read(todoDetail, "$.data.categories[0].id");
+
+        // Append two items to the grocery list; assert order and persistence.
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", groceryListId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "items": [ { "text": "2 chicken breasts" }, { "text": "1 tbsp olive oil" } ] }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data[0].text").value("2 chicken breasts"))
+                .andExpect(jsonPath("$.data[1].text").value("1 tbsp olive oil"));
+
+        mockMvc.perform(get("/api/lists/{id}", groceryListId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].text").value("2 chicken breasts"))
+                .andExpect(jsonPath("$.data.items[1].text").value("1 tbsp olive oil"));
+
+        // Generic proof: the same endpoint appends to a to-do list (no grocery coupling).
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", todoListId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "items": [ { "text": "call plumber" } ] }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data[0].text").value("call plumber"));
+
+        // Rollback proof: a wrong-kind (TODO) category in the second item writes nothing.
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", groceryListId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "items": [ { "text": "should not persist" }, { "text": "bad", "categoryId": "%s" } ] }
+                                """.formatted(todoCategoryId)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/lists/{id}", groceryListId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2)); // still only the first two
+    }
+
+    @Test
+    void bulkAppend_listNotInFamily_returns404() throws Exception {
+        // Family A creates a grocery list.
+        String tokenA = registerAndGetToken(uniqueUsername());
+        String listBody = mockMvc.perform(post("/api/lists")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "A Groceries", "kind": "grocery"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String listId = JsonPath.read(listBody, "$.data.id");
+
+        // Family B tries to bulk-append to A's list → 404 (cross-family not revealed).
+        String tokenB = registerAndGetToken(uniqueUsername());
+        mockMvc.perform(post("/api/lists/{id}/items/bulk", listId)
+                        .header("Authorization", "Bearer " + tokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "items": [ { "text": "milk" } ] }
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    // -------------------------------------------------------------------------
     // Registration seeds catalog scopes and starter categories
     // -------------------------------------------------------------------------
 
