@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.0](https://github.com/joe-bor/family-hub-api/compare/v1.8.0...v1.9.0) (2026-07-05)
+
+
+### Features
+
+* **lists:** add named MAX_BULK_ITEMS constant and service-level batch guard ([99b69bd](https://github.com/joe-bor/family-hub-api/commit/99b69bd6f61445cfce0a70f53e538145c6f467d2))
+* **lists:** add transactional bulk item append service ([4746074](https://github.com/joe-bor/family-hub-api/commit/47460740730608c1d9ab963c1bfb741067d284e5))
+* **lists:** expose bulk item append endpoint ([4fb14a8](https://github.com/joe-bor/family-hub-api/commit/4fb14a883c07463112458742e17f2543bde81b07))
+
+
+### Bug Fixes
+
+* **lists:** make list-item read order deterministic with id tiebreaker ([e47b6a1](https://github.com/joe-bor/family-hub-api/commit/e47b6a1ff4b6de991a896a9b171df26ea2bd924c))
+
 ## [1.8.0](https://github.com/joe-bor/family-hub-api/compare/v1.7.0...v1.8.0) (2026-07-01)
 
 
